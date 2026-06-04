@@ -11,9 +11,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     BOTTLE_SIZE_OPTIONS,
-    BOTTLE_SIZE_TO_BYTE,
+    BOTTLE_SIZE_TO_WRITE_BYTE,
     DOMAIN,
-    GATT_CHAR_CONFIG,
+    GATT_CHAR_WRITE_NR,
 )
 from .coordinator import GasolinaCoordinator
 
@@ -31,7 +31,14 @@ async def async_setup_entry(
 
 
 class GasolinaBottleSizeSelect(SelectEntity):
-    """Select entity to read and set the configured bottle size."""
+    """Select entity to read and set the configured bottle size.
+
+    Reading works fully via passive BLE advertisement (data[10]).
+    Writing is implemented based on partial reverse-engineering:
+      - Characteristic 0002 (Write Without Response) accepts a single byte.
+      - BOTTLE_SIZE_TO_WRITE_BYTE maps each label to its confirmed write byte.
+      - Protocol was confirmed with Android HCI snoop log.
+    """
 
     _attr_has_entity_name = True
     _attr_name = "Flaschengröße"
@@ -69,11 +76,12 @@ class GasolinaBottleSizeSelect(SelectEntity):
         self.async_write_ha_state()
 
     async def async_select_option(self, option: str) -> None:
-        """Write new bottle size to sensor via GATT."""
-        type_byte = BOTTLE_SIZE_TO_BYTE.get(option)
-        if type_byte is None:
+        """Write new bottle size to sensor via GATT (characteristic 0002)."""
+        write_byte = BOTTLE_SIZE_TO_WRITE_BYTE.get(option)
+        if write_byte is None:
             _LOGGER.error(
-                "Cannot set bottle size '%s': GATT write protocol not yet confirmed for this size",
+                "Cannot set bottle size '%s': write byte not yet confirmed. "
+                "Please open a GitHub issue with your Android HCI snoop log.",
                 option,
             )
             return
@@ -81,16 +89,20 @@ class GasolinaBottleSizeSelect(SelectEntity):
         try:
             from bleak import BleakClient
             async with BleakClient(self._coordinator.address) as client:
-                # TODO: Confirm exact write payload format by sniffing the
-                # official Gasolina app while changing bottle size.
-                # Known: bottle type byte lives at payload position 10.
-                # Current best-guess: send the single type byte to GATT_CHAR_CONFIG.
-                await client.write_gatt_char(GATT_CHAR_CONFIG, bytes([type_byte]))
+                await client.write_gatt_char(
+                    GATT_CHAR_WRITE_NR,
+                    bytes([write_byte]),
+                    response=False,
+                )
                 _LOGGER.debug(
-                    "Wrote bottle size %s (byte %#04x) to %s",
+                    "Wrote bottle size %s (byte %#04x) to %s via char 0002",
                     option,
-                    type_byte,
+                    write_byte,
                     self._coordinator.address,
                 )
         except Exception as exc:
-            _LOGGER.error("Failed to write bottle size to %s: %s", self._coordinator.address, exc)
+            _LOGGER.error(
+                "Failed to write bottle size to %s: %s",
+                self._coordinator.address,
+                exc,
+            )
