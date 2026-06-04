@@ -24,7 +24,7 @@ from .models import GasolinaData
 @dataclass(frozen=True)
 class GasolinaSensorEntityDescription(SensorEntityDescription):
     """Describes a Gasolina sensor entity."""
-    value_fn: Callable[[GasolinaData], int | float | None] = lambda _: None
+    value_fn: Callable[[GasolinaData], int | float | str | None] = lambda _: None
 
 
 SENSOR_DESCRIPTIONS: tuple[GasolinaSensorEntityDescription, ...] = (
@@ -50,6 +50,12 @@ SENSOR_DESCRIPTIONS: tuple[GasolinaSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda d: d.temperature,
+    ),
+    GasolinaSensorEntityDescription(
+        key="bottle_size",
+        name="Flaschengröße",
+        icon="mdi:gas-cylinder",
+        value_fn=lambda d: d.bottle_size,
     ),
 )
 
@@ -88,7 +94,7 @@ class GasolinaSensor(SensorEntity):
         )
 
     @property
-    def native_value(self) -> int | float | None:
+    def native_value(self) -> int | float | str | None:
         if self._coordinator.data is None:
             return None
         return self.entity_description.value_fn(self._coordinator.data)
