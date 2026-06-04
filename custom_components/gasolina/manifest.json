@@ -1,0 +1,18 @@
+{
+  "domain": "gasolina",
+  "name": "Gasolina",
+  "version": "0.1.0",
+  "documentation": "https://github.com/JulienBubrecht/hacs-gasolina",
+  "issue_tracker": "https://github.com/JulienBubrecht/hacs-gasolina/issues",
+  "dependencies": ["bluetooth"],
+  "bluetooth": [
+    {
+      "manufacturer_id": 529,
+      "manufacturer_data_start": [1]
+    }
+  ],
+  "codeowners": ["@JulienBubrecht"],
+  "requirements": [],
+  "iot_class": "local_push",
+  "config_flow": true
+}
