@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Gasolina Sensor hinzufügen",
+        "description": "Wähle einen gefundenen Gasolina-Sensor aus.",
+        "data": {
+          "address": "Sensor"
+        }
+      },
+      "bluetooth_confirm": {
+        "title": "Gasolina Sensor gefunden",
+        "description": "Möchtest du den Sensor **{name}** hinzufügen?"
+      }
+    },
+    "abort": {
+      "already_configured": "Dieser Sensor ist bereits eingerichtet.",
+      "no_devices_found": "Kein Gasolina-Sensor in der Nähe gefunden. Stelle sicher, dass der Sensor eingeschaltet und in Reichweite ist.",
+      "not_supported": "Dieses Gerät wird nicht unterstützt."
+    }
+  }
+}
