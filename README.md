@@ -39,7 +39,7 @@ custom_components/gasolina/  →  <config>/custom_components/gasolina/
 
 ## Bekannte Einschränkungen
 
-- Byte-Werte für **8 kg** und **19 kg** Flaschen sind noch nicht bestätigt. Die Flaschengröße wird für diese Größen als `unknown` angezeigt.
+- Der Byte-Wert für **19 kg** (`0x09`) basiert auf einem Sequenzmuster und ist noch nicht messtechnisch bestätigt.
 - Das GATT-Write-Protokoll für die Flaschenkonfiguration ist noch nicht vollständig verifiziert. Beiträge willkommen!
 
 ## Byte-Protokoll (BLE Advertisement)
@@ -53,7 +53,9 @@ Manufacturer Data (Company ID `0x0211` = Telink Semiconductor):
 | 2 | Temperatur (°C) |
 | 4 | Füllstand (%) |
 | 6 | Batterie (%) |
-| 10 | Flaschengröße (`0x06`=11kg, `0x07`=5kg) |
+| 10 | Flaschengröße (`0x06`=11kg, `0x07`=5kg, `0x08`=8kg, `0x09`=19kg*) |
+
+*19 kg nicht messtechnisch bestätigt – basiert auf Sequenzmuster.
 
 ## GATT Services
 

@@ -17,8 +17,8 @@ MIN_MANUFACTURER_DATA_LENGTH = 11
 BOTTLE_SIZES: dict[int, str] = {
     0x06: "11kg",
     0x07: "5kg",
-    # 0x??: "8kg",   # TODO: confirm byte value
-    # 0x??: "19kg",  # TODO: confirm byte value
+    0x08: "8kg",
+    0x09: "19kg",  # unverified – based on sequence pattern (06,07,08,09)
 }
 
 BOTTLE_SIZE_OPTIONS = ["5kg", "8kg", "11kg", "19kg"]
