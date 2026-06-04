@@ -23,8 +23,16 @@ BOTTLE_SIZES: dict[int, str] = {
 
 BOTTLE_SIZE_OPTIONS = ["5kg", "8kg", "11kg", "19kg"]
 
-# Reverse mapping used when writing bottle size via GATT
-BOTTLE_SIZE_TO_BYTE: dict[str, int] = {v: k for k, v in BOTTLE_SIZES.items()}
+# Write bytes for characteristic 0002 (Write Without Response).
+# Determined via Android HCI snoop log of the official Gasolina app.
+# TODO: confirm all values once snoop log is available.
+# Partial finding: writing 0x06 to 0002 resulted in app showing "11kg".
+BOTTLE_SIZE_TO_WRITE_BYTE: dict[str, int] = {
+    # "5kg": 0x??,   # TODO: confirm
+    # "8kg": 0x??,   # TODO: confirm
+    "11kg": 0x06,    # confirmed: write 0x06 → app shows 11kg
+    # "19kg": 0x??,  # TODO: confirm
+}
 
 # GATT service & characteristic UUIDs
 GATT_SERVICE_UUID = "00001102-0000-1000-8000-00805f9b34fb"
