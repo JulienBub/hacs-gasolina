@@ -51,12 +51,6 @@ SENSOR_DESCRIPTIONS: tuple[GasolinaSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda d: d.temperature,
     ),
-    GasolinaSensorEntityDescription(
-        key="bottle_size",
-        name="Flaschengröße",
-        icon="mdi:gas-cylinder",
-        value_fn=lambda d: d.bottle_size,
-    ),
 )
 
 
