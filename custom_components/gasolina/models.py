@@ -10,7 +10,6 @@ from .const import (
     MIN_MANUFACTURER_DATA_LENGTH,
     OFFSET_BATTERY,
     OFFSET_FILL_LEVEL,
-    OFFSET_TEMPERATURE,
 )
 
 
@@ -18,9 +17,8 @@ from .const import (
 class GasolinaData:
     """Parsed data from a Gasolina BLE advertisement."""
 
-    fill_level: int   # 0–100 %
-    battery: int      # 0–100 %
-    temperature: int  # °C
+    fill_level: int  # 0–100 %
+    battery: int     # 0–100 %
 
 
 def parse_advertisement(service_info: BluetoothServiceInfoBleak) -> GasolinaData | None:
@@ -30,7 +28,6 @@ def parse_advertisement(service_info: BluetoothServiceInfoBleak) -> GasolinaData
         return None
 
     return GasolinaData(
-        temperature=data[OFFSET_TEMPERATURE],
         fill_level=data[OFFSET_FILL_LEVEL],
         battery=data[OFFSET_BATTERY],
     )
