@@ -6,11 +6,9 @@ from dataclasses import dataclass
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 
 from .const import (
-    BOTTLE_SIZES,
     MANUFACTURER_ID,
     MIN_MANUFACTURER_DATA_LENGTH,
     OFFSET_BATTERY,
-    OFFSET_BOTTLE_TYPE,
     OFFSET_FILL_LEVEL,
     OFFSET_TEMPERATURE,
 )
@@ -20,15 +18,9 @@ from .const import (
 class GasolinaData:
     """Parsed data from a Gasolina BLE advertisement."""
 
-    fill_level: int       # 0–100 %
-    battery: int          # 0–100 %
-    temperature: int      # °C
-    bottle_type_raw: int  # raw byte from advertisement
-
-    @property
-    def bottle_size(self) -> str:
-        """Human-readable bottle size, or raw hex if unknown."""
-        return BOTTLE_SIZES.get(self.bottle_type_raw, f"unknown ({self.bottle_type_raw:#04x})")
+    fill_level: int   # 0–100 %
+    battery: int      # 0–100 %
+    temperature: int  # °C
 
 
 def parse_advertisement(service_info: BluetoothServiceInfoBleak) -> GasolinaData | None:
@@ -41,7 +33,6 @@ def parse_advertisement(service_info: BluetoothServiceInfoBleak) -> GasolinaData
         temperature=data[OFFSET_TEMPERATURE],
         fill_level=data[OFFSET_FILL_LEVEL],
         battery=data[OFFSET_BATTERY],
-        bottle_type_raw=data[OFFSET_BOTTLE_TYPE],
     )
 
 
