@@ -92,8 +92,10 @@ class GasolinaCoordinator:
         )
         _LOGGER.debug("Started BLE listener for %s", self.address)
 
-        # Read bottle size after next advertisement (non-blocking)
-        self.hass.async_create_task(self._async_init_bottle_size())
+        # One-shot GATT diagnostic dump (full service/characteristic map).
+        # NOTE: temporarily the only on-start GATT op to avoid two concurrent
+        # connections fighting over the shared advertisement trigger.
+        self.hass.async_create_task(self._async_dump_gatt())
 
         if self.scan_interval > 0:
             self._cancel_interval = async_track_time_interval(
@@ -138,6 +140,41 @@ class GasolinaCoordinator:
             _LOGGER.info("%s: bottle size from GATT = %s", self.address, size)
             self.bottle_size = size
             self._notify_listeners()
+
+    async def _async_dump_gatt(self) -> None:
+        """One-shot diagnostic: connect and log the full GATT table.
+
+        Logs every service + characteristic with its properties and current
+        readable value, so we can identify which characteristic actually
+        stores the bottle size (the one that reads 0x06 for an 11kg bottle).
+        """
+        async def _dump(client):
+            import asyncio as _asyncio
+            _LOGGER.warning("=== GATT-DUMP for %s START ===", self.address)
+            for service in client.services:
+                _LOGGER.warning("GATT-DUMP service %s", service.uuid)
+                for char in service.characteristics:
+                    props = ",".join(char.properties)
+                    value_hex = "-"
+                    if "read" in char.properties:
+                        try:
+                            raw = await _asyncio.wait_for(
+                                client.read_gatt_char(char.uuid), timeout=5.0
+                            )
+                            value_hex = raw.hex() if raw else "empty"
+                        except Exception as exc:  # noqa: BLE001
+                            value_hex = f"read-error:{exc}"
+                    _LOGGER.warning(
+                        "GATT-DUMP   char %s [%s] = %s",
+                        char.uuid, props, value_hex,
+                    )
+            _LOGGER.warning("=== GATT-DUMP for %s END ===", self.address)
+            return True
+
+        try:
+            await self._gatt_trigger.run_on_next_advertisement(_dump)
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning("%s: GATT dump failed – %s", self.address, exc)
 
     @callback
     def _async_periodic_gatt_read(self, _now=None) -> None:
