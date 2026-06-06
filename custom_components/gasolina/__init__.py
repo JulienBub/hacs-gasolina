@@ -19,6 +19,8 @@ PLATFORMS = [Platform.SENSOR, Platform.SELECT]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Gasolina from a config entry."""
     address: str = entry.data["address"]
+    # bottle_size can come from setup data (new) or be absent (legacy entries)
+    _ = entry.data.get("bottle_size", DEFAULT_BOTTLE_SIZE)  # stored for reference
 
     # Scan interval: stored as label string in options, convert to seconds
     interval_label = entry.options.get(CONF_SCAN_INTERVAL, None)
