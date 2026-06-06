@@ -18,8 +18,12 @@ GATT_CHAR_DATA_UUID = "00001102-0001-1000-8000-00805f9b34fb"  # live data (read,
 GATT_CHAR_RW_UUID   = "00001102-0002-1000-8000-00805f9b34fb"  # scratch (reads 01020304)
 GATT_CHAR_CMD_UUID  = "00001102-0003-1000-8000-00805f9b34fb"  # command/config (write+notify)
 
-# Bottle size ↔ GATT write byte
-# Confirmed: 11kg=0x06  |  Pattern: 5kg=0x07, 8kg=0x08, 19kg=0x09
+# Bottle size code, read from char 0001 byte[7] (the live data characteristic).
+# CONFIRMED via GATT read: 11kg = 0x06 (device byte[7] reads 0x06 when app set 11kg).
+# 5kg/8kg/19kg inferred from the pattern – to be verified by reading byte[7]
+# after setting each size in the official app.
+GATT_DATA_BOTTLE_SIZE_OFFSET = 7
+
 BOTTLE_SIZE_TO_BYTE: dict[str, int] = {
     "5kg":  0x07,
     "8kg":  0x08,
