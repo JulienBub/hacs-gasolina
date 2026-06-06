@@ -151,7 +151,12 @@ class GasolinaCoordinator:
         async def _dump(client):
             import asyncio as _asyncio
             _LOGGER.warning("=== GATT-DUMP for %s START ===", self.address)
-            for service in client.services:
+            services = client.services
+            try:
+                service_list = list(services)
+            except TypeError:
+                service_list = list(getattr(services, "services", {}).values())
+            for service in service_list:
                 _LOGGER.warning("GATT-DUMP service %s", service.uuid)
                 for char in service.characteristics:
                     props = ",".join(char.properties)
@@ -159,7 +164,7 @@ class GasolinaCoordinator:
                     if "read" in char.properties:
                         try:
                             raw = await _asyncio.wait_for(
-                                client.read_gatt_char(char.uuid), timeout=5.0
+                                client.read_gatt_char(char.uuid), timeout=3.0
                             )
                             value_hex = raw.hex() if raw else "empty"
                         except Exception as exc:  # noqa: BLE001
