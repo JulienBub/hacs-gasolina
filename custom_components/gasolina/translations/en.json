@@ -13,7 +13,6 @@
       "bond": {
         "title": "Pair Sensor",
         "description": "**Press the SYNC button on the sensor for 5 seconds** until the LED flashes.\n\nThen click **Pair** within 30 seconds – Home Assistant will connect to the sensor once to establish a Bluetooth bond.\n\nThis step is only required during initial setup.",
-        "submit": "Pair"
       },
       "bottle_size": {
         "title": "Choose Bottle Size",
