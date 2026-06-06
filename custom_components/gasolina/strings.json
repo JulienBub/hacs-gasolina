@@ -13,7 +13,6 @@
       "bond": {
         "title": "Sensor koppeln",
         "description": "**Drücke jetzt den SYNC-Knopf am Sensor für 5 Sekunden** bis die LED blinkt.\n\nKlicke danach innerhalb von 30 Sekunden auf **Koppeln** – Home Assistant verbindet sich einmalig mit dem Sensor.\n\nDieser Schritt ist nur beim ersten Einrichten nötig.",
-        "submit": "Koppeln"
       },
       "bottle_size": {
         "title": "Flaschengröße wählen",
