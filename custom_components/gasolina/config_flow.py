@@ -1,6 +1,7 @@
 """Config flow for Gasolina integration."""
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import voluptuous as vol
@@ -22,16 +23,31 @@ from .models import is_gasolina_device
 
 _LOGGER = logging.getLogger(__name__)
 
+_BOND_ATTEMPT_TIMEOUT = 30.0   # seconds to wait for GATT connection during bonding
+
 
 class GasolinaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Gasolina."""
+    """Handle a config flow for Gasolina.
+
+    Steps
+    -----
+    1. ``bluetooth`` / ``user``  – discover / select device
+    2. ``bluetooth_confirm``     – confirm the detected device
+    3. ``bond``                  – user presses SYNC, HA bonds via GATT
+    4. Entry is created
+    """
 
     VERSION = 1
 
     def __init__(self) -> None:
         self._discovery_info: BluetoothServiceInfoBleak | None = None
         self._discovered_devices: dict[str, str] = {}
+        self._address: str | None = None
+        self._name: str | None = None
 
+    # ------------------------------------------------------------------
+    # Step 1a: automatic Bluetooth discovery
+    # ------------------------------------------------------------------
     async def async_step_bluetooth(
         self, discovery_info: BluetoothServiceInfoBleak
     ) -> FlowResult:
@@ -40,36 +56,23 @@ class GasolinaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if not is_gasolina_device(discovery_info):
             return self.async_abort(reason="not_supported")
         self._discovery_info = discovery_info
-        self.context["title_placeholders"] = {
-            "name": discovery_info.name or discovery_info.address
-        }
+        self._address = discovery_info.address
+        self._name = discovery_info.name or discovery_info.address
+        self.context["title_placeholders"] = {"name": self._name}
         return await self.async_step_bluetooth_confirm()
 
-    async def async_step_bluetooth_confirm(
-        self, user_input: dict | None = None
-    ) -> FlowResult:
-        assert self._discovery_info is not None
-        if user_input is not None:
-            return self.async_create_entry(
-                title=self._discovery_info.name or self._discovery_info.address,
-                data={"address": self._discovery_info.address},
-            )
-        return self.async_show_form(
-            step_id="bluetooth_confirm",
-            description_placeholders={
-                "name": self._discovery_info.name or self._discovery_info.address
-            },
-        )
-
+    # ------------------------------------------------------------------
+    # Step 1b: manual device selection
+    # ------------------------------------------------------------------
     async def async_step_user(
         self, user_input: dict | None = None
     ) -> FlowResult:
         if user_input is not None:
-            address = user_input["address"]
-            await self.async_set_unique_id(address, raise_on_progress=False)
+            self._address = user_input["address"]
+            await self.async_set_unique_id(self._address, raise_on_progress=False)
             self._abort_if_unique_id_configured()
-            name = self._discovered_devices.get(address, address)
-            return self.async_create_entry(title=name, data={"address": address})
+            self._name = self._discovered_devices.get(self._address, self._address)
+            return await self.async_step_bond()
 
         configured = self._async_current_ids()
         for info in async_discovered_service_info(self.hass):
@@ -93,6 +96,84 @@ class GasolinaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
         )
 
+    # ------------------------------------------------------------------
+    # Step 2: confirm discovered device, then go to bonding
+    # ------------------------------------------------------------------
+    async def async_step_bluetooth_confirm(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        assert self._discovery_info is not None
+        if user_input is not None:
+            return await self.async_step_bond()
+
+        return self.async_show_form(
+            step_id="bluetooth_confirm",
+            description_placeholders={"name": self._name},
+        )
+
+    # ------------------------------------------------------------------
+    # Step 3: SYNC + initial BLE bonding
+    # ------------------------------------------------------------------
+    async def async_step_bond(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        """Ask the user to press SYNC, then attempt GATT bonding."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            # User clicked "Bond" – attempt the GATT connection + pairing now
+            bond_result = await self._async_attempt_bond()
+            if bond_result == "ok":
+                return self.async_create_entry(
+                    title=self._name or self._address,
+                    data={"address": self._address, "bonded": True},
+                )
+            errors["base"] = bond_result  # "bond_failed" or "bond_timeout"
+
+        return self.async_show_form(
+            step_id="bond",
+            description_placeholders={"name": self._name or self._address},
+            errors=errors,
+        )
+
+    async def _async_attempt_bond(self) -> str:
+        """Try to connect and pair via GATT.  Returns 'ok' or an error key."""
+        try:
+            from bleak import BleakClient
+            from homeassistant.components.bluetooth import async_ble_device_from_address
+
+            device = async_ble_device_from_address(
+                self.hass, self._address, connectable=True
+            )
+            if device is None:
+                _LOGGER.warning(
+                    "%s: no connectable device found for bonding", self._address
+                )
+                return "bond_failed"
+
+            _LOGGER.debug("%s: attempting initial GATT bond", self._address)
+            async with BleakClient(device, timeout=_BOND_ATTEMPT_TIMEOUT) as client:
+                try:
+                    await asyncio.wait_for(client.pair(), timeout=15.0)
+                    _LOGGER.info("%s: initial BLE bond established ✓", self._address)
+                except Exception as exc:  # noqa: BLE001
+                    # Some devices don't need explicit pairing – treat as success
+                    # only if the connection itself succeeded (we got here).
+                    _LOGGER.debug(
+                        "%s: pair() not required or not supported – %s", self._address, exc
+                    )
+            return "ok"
+
+        except asyncio.TimeoutError:
+            _LOGGER.warning("%s: GATT bond timed out", self._address)
+            return "bond_timeout"
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.error("%s: GATT bond failed – %s", self._address, exc)
+            return "bond_failed"
+
+    # ------------------------------------------------------------------
+    # Options flow (scan interval)
+    # ------------------------------------------------------------------
     @staticmethod
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
@@ -115,7 +196,6 @@ class GasolinaOptionsFlow(config_entries.OptionsFlow):
         current_seconds = self._config_entry.options.get(
             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
         )
-        # Find the label matching the current value (or default to "Deaktiviert")
         current_label = next(
             (k for k, v in SCAN_INTERVAL_OPTIONS.items() if v == current_seconds),
             "Deaktiviert",
@@ -130,5 +210,4 @@ class GasolinaOptionsFlow(config_entries.OptionsFlow):
                     ): vol.In(list(SCAN_INTERVAL_OPTIONS.keys()))
                 }
             ),
-            description_placeholders={},
         )
