@@ -4,19 +4,35 @@
       "user": {
         "title": "Add Gasolina Sensor",
         "description": "Select a discovered Gasolina sensor.",
-        "data": {
-          "address": "Sensor"
-        }
+        "data": { "address": "Sensor" }
       },
       "bluetooth_confirm": {
         "title": "Gasolina Sensor Found",
-        "description": "Do you want to add the sensor **{name}**?"
+        "description": "Sensor **{name}** was found. Click Next to pair it."
+      },
+      "bond": {
+        "title": "Pair Sensor",
+        "description": "**Press the SYNC button on the sensor for 5 seconds** until the LED flashes.\n\nThen click **Pair** within 30 seconds – Home Assistant will connect to the sensor once to establish a Bluetooth bond.\n\nThis step is only required during initial setup.",
+        "submit": "Pair"
       }
+    },
+    "error": {
+      "bond_failed": "Connection to sensor failed. Make sure the SYNC button was pressed and the sensor is in range.",
+      "bond_timeout": "Connection timed out. Press the SYNC button again and try immediately."
     },
     "abort": {
       "already_configured": "This sensor is already configured.",
-      "no_devices_found": "No Gasolina sensor found nearby. Make sure the sensor is powered on and in range.",
+      "no_devices_found": "No Gasolina sensor found nearby.",
       "not_supported": "This device is not supported."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Gasolina Options",
+        "description": "Periodic bottle size refresh via Bluetooth.\n\n⚠️ Frequent connections increase the sensor's battery drain.",
+        "data": { "scan_interval": "Update interval" }
+      }
     }
   }
 }
