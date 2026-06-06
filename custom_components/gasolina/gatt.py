@@ -51,12 +51,14 @@ async def _connect_and_run(hass: HomeAssistant, address: str, coro_factory):
         _LOGGER.warning("%s: no connectable BLE device found", address)
         return None
 
+    _LOGGER.warning("%s: GATT connecting (establish_connection)…", address)
     client = await establish_connection(
         BleakClient,
         device,
         address,
         max_attempts=3,
     )
+    _LOGGER.warning("%s: GATT connected ✓", address)
     try:
         # Try to pair/bond (required on first connection; harmless afterwards)
         try:
