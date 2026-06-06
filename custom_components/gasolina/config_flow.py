@@ -77,14 +77,8 @@ class GasolinaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_bluetooth_confirm(
         self, user_input: dict | None = None
     ) -> FlowResult:
-        """HA-required confirmation step for auto-discovered devices."""
-        if user_input is not None:
-            return await self.async_step_bond()
-
-        return self.async_show_form(
-            step_id="bluetooth_confirm",
-            description_placeholders={"name": self._name or self._address},
-        )
+        """HA-required step for auto-discovered devices – forwards directly to bond."""
+        return await self.async_step_bond(user_input)
 
     # ------------------------------------------------------------------ #
     # Step 1: Manual entry point – shows scan list                        #
