@@ -1,35 +1,60 @@
 # Gasolina – Home Assistant Integration
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+<p align="center">
+  <img src="custom_components/gasolina/logo.png" alt="Gasolina Logo" width="150"/>
+</p>
 
-Inoffizielle Home Assistant Integration für den [Gasolina](https://www.gaso-lina.com/) Ultraschall-Gasflaschensensor. Der Sensor kommuniziert per Bluetooth Low Energy (BLE) und wird über ESP32-Bluetooth-Proxys oder den eingebauten Bluetooth-Adapter deines Home Assistant Hosts empfangen.
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+[![HA Version](https://img.shields.io/badge/Home%20Assistant-2023.8%2B-blue.svg)](https://www.home-assistant.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+Inoffizielle Home Assistant Integration für den [Gasolina](https://www.gaso-lina.com/) Ultraschall-Gasflaschensensor.  
+Der Sensor kommuniziert **passiv per Bluetooth Low Energy (BLE)** – kein Pairing, kein Gateway, keine Cloud.
+
+---
 
 ## Unterstützte Geräte
 
-| Gerät | Status |
-|---|---|
-| Gasolina Gas Bottle Sensor | ✅ |
+| Gerät | Hersteller (OEM) | Status |
+|---|---|---|
+| Gasolina Gas Bottle Sensor (`@UTS...`) | Thincke Inc – UTS_MIN V1.3 | ✅ Vollständig unterstützt |
 
-## Features
+---
 
-- **Füllstand** in % (aus BLE-Advertisement, passiv – kein Pairing nötig)
-- **Batteriestand** in %
-- **Temperatur** in °C
-- **Flaschengröße** anzeigen und konfigurieren (5 kg, 8 kg, 11 kg, 19 kg)
-- **Automatische Erkennung** über HA Bluetooth-Stack
-- **Mehrere Sensoren** gleichzeitig unterstützt
+## Sensoren
+
+| Entity | Einheit | Beschreibung |
+|---|---|---|
+| 📊 **Füllstand** | % | Berechneter Füllstand (kalibriert nach Flaschengröße) |
+| 🔋 **Batterie** | % | Ladezustand der CR2032-Batterie |
+
+---
 
 ## Voraussetzungen
 
-- Home Assistant 2023.8.0 oder neuer
-- Bluetooth-Empfang: eingebauter BT-Adapter **oder** ein [ESPHome Bluetooth Proxy](https://esphome.io/components/bluetooth_proxy.html)
+- **Home Assistant** 2023.8.0 oder neuer
+- **Bluetooth-Empfang** – eine der folgenden Optionen:
+  - Eingebauter BT-Adapter im HA-Host
+  - [ESPHome Bluetooth Proxy](https://esphome.io/components/bluetooth_proxy.html) (empfohlen für größere Wohnungen)
+
+> **Kein Tuya-Gateway nötig!** Die Integration liest die BLE-Advertisements passiv – genauso wie die Gasolina-App.
+
+---
 
 ## Installation via HACS
 
-1. HACS öffnen → **Integrationen** → Drei-Punkte-Menü → **Benutzerdefiniertes Repository hinzufügen**
-2. URL: `https://github.com/JulienBubrecht/hacs-gasolina` · Kategorie: **Integration**
-3. Integration suchen und installieren → Home Assistant neu starten
-4. **Einstellungen → Geräte & Dienste → + Integration hinzufügen → Gasolina**
+1. **HACS** öffnen → **Integrationen** → ⋮ → **Benutzerdefiniertes Repository hinzufügen**
+2. URL eingeben: `https://github.com/JulienBub/hacs-gasolina` · Kategorie: **Integration**
+3. „Gasolina" suchen und installieren
+4. Home Assistant **neu starten**
+5. **Einstellungen → Geräte & Dienste → + Integration hinzufügen → Gasolina**
+6. Flaschengröße auswählen (5 kg / 8 kg / 11 kg / 19 kg)
+
+### Flaschengröße nachträglich ändern
+
+**Einstellungen → Geräte & Dienste → Gasolina → ⚙️ Konfigurieren**
+
+---
 
 ## Manuelle Installation
 
@@ -37,41 +62,78 @@ Inoffizielle Home Assistant Integration für den [Gasolina](https://www.gaso-lin
 custom_components/gasolina/  →  <config>/custom_components/gasolina/
 ```
 
+Danach HA neu starten und die Integration wie oben einrichten.
+
+---
+
+## Flaschengröße & Kalibrierung
+
+Die Flaschengröße wird bei der Einrichtung einmalig ausgewählt. Sie bestimmt den **echo_max**-Kalibrierwert, der für die genaue Füllstandsberechnung nötig ist:
+
+| Flaschengröße | echo_max | Status |
+|---|---|---|
+| 5 kg | 95 | ✅ Messtechnisch bestätigt |
+| 8 kg | 116 | ⚠️ Geschätzt (quadratische Interpolation) |
+| 11 kg | 139 | ✅ Messtechnisch bestätigt |
+| 19 kg | 206 | ✅ Bestätigt (Kreuz-Kalibrierung) |
+
+**Formel:** `Füllstand % = data[25] × 100 / echo_max`
+
+---
+
+## BLE-Protokoll (vollständig reverse-engineered)
+
+Der Sensor sendet **BLE-Manufacturer-Advertisements** mit Company-ID `0x0211` (Telink Semiconductor).  
+Alle relevanten Daten werden **passiv** übertragen – keine aktive Verbindung erforderlich.
+
+**Manufacturer Data** (nach Abzug der 2-Byte Company-ID):
+
+| Offset | Wert (Beispiel 11 kg, ~89 % voll) | Bedeutung |
+|---|---|---|
+| `[0]` | `0x01` | Flags / Firmware-Typ (konstant) |
+| `[1]` | `0x18` = 24 | Echo-Distanz (sinkt mit steigendem Füllstand) |
+| `[2]` | `0x23` = 35 | Konstante (Firmware/Kalibrierung) |
+| `[3]` | `0x45` = 69 | Konstante (Firmware/Kalibrierung) |
+| `[6]` | `0x64` = 100 | **Batterie %** ✅ |
+| `[25]` | `0x7C` = 124 | **Füll-Echo-Einheiten** → `124 / 139 × 100 = 89 %` ✅ |
+
+> Die Integration nutzt ausschließlich `data[6]` (Batterie) und `data[25]` (Füllstand).
+
+### Lokaler Name
+
+Alle Gasolina-Sensoren verwenden den Präfix `@UTS` gefolgt von Teilen der MAC-Adresse, z. B. `@UTS46DFA7EF`.
+
+---
+
+## Hardware
+
+| Eigenschaft | Wert |
+|---|---|
+| Hersteller (OEM) | Thincke Inc, Xi'an, China |
+| Modell | UTS_MIN V1.3 |
+| BLE-Chip | Telink Semiconductor (Company ID `0x0211`) |
+| Batterie | CR2032 (1–2 Jahre Laufzeit) |
+| Schutzklasse | IP55 |
+| Befestigung | Magnet, außen auf dem Flaschenboden |
+| BLE-Reichweite | 150 m (Freifeld), ~25 m (an Flasche) |
+
+---
+
 ## Bekannte Einschränkungen
 
-- Der Byte-Wert für **19 kg** (`0x09`) basiert auf einem Sequenzmuster und ist noch nicht messtechnisch bestätigt.
-- Das GATT-Write-Protokoll für die Flaschenkonfiguration ist noch nicht vollständig verifiziert. Beiträge willkommen!
+- **8 kg** echo_max = 116 ist eine Schätzung – Bestätigung durch Leer-Flaschenscan steht aus
+- Die Integration arbeitet **rein passiv** – Flaschenkonfiguration (Größe) muss einmalig in der Gasolina-App oder per Tuya-Gateway vorgenommen werden
+- Der Sensor misst keine Temperatur (kein Temperatursensor in der Hardware vorhanden)
 
-## Byte-Protokoll (BLE Advertisement)
-
-Manufacturer Data (Company ID `0x0211` = Telink Semiconductor):
-
-| Offset | Inhalt |
-|---|---|
-| 0 | Typ/Version (`0x01`) |
-| 1 | Ultraschall-Rohmessung (variiert) |
-| 2 | Temperatur (°C) |
-| 4 | Füllstand (%) |
-| 6 | Batterie (%) |
-| 10 | Flaschengröße (`0x06`=11kg, `0x07`=5kg, `0x08`=8kg, `0x09`=19kg*) |
-
-*19 kg nicht messtechnisch bestätigt – basiert auf Sequenzmuster.
-
-## GATT Services
-
-| UUID | Beschreibung |
-|---|---|
-| `0000180F-...` | Battery Service (Standard) |
-| `00001102-0000-1000-8000-00805F9B34FB` | Gasolina Custom Service |
-| `00001102-0001-...` | Read, Notify |
-| `00001102-0002-...` | Read, Write Without Response |
-| `00001102-0003-...` | Read, Write, Notify (Konfiguration) |
+---
 
 ## Mitwirken
 
 PRs willkommen! Besonders gesucht:
-- Bestätigung der Byte-Werte für 8 kg und 19 kg Flaschen
-- Verifikation des GATT-Write-Protokolls für Flaschenkonfiguration
+- Bestätigung des echo_max-Werts für **8 kg** (Leer-Scan via nRF Connect)
+- Testergebnisse mit weiteren Flaschengrößen
+
+---
 
 ## Lizenz
 
