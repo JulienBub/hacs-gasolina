@@ -114,18 +114,22 @@ class GasolinaCoordinator:
 
         # Single-op read of char 0001 byte[7] = the bottle-size register.
         async def _read(client):
-            from .const import GATT_CHAR_DATA_UUID, BYTE_TO_BOTTLE_SIZE
+            from .const import (
+                GATT_CHAR_DATA_UUID,
+                GATT_DATA_BOTTLE_SIZE_OFFSET,
+                BYTE_TO_BOTTLE_SIZE,
+            )
             import asyncio
             await asyncio.sleep(1.5)
             raw = await asyncio.wait_for(
                 client.read_gatt_char(GATT_CHAR_DATA_UUID), timeout=6.0
             )
-            if raw and len(raw) > 7:
-                code = raw[7]
-                _LOGGER.warning(
-                    "%s: SIZE-READ char0001=%s → byte7=0x%02X (%s)",
-                    self.address, raw.hex(), code,
-                    BYTE_TO_BOTTLE_SIZE.get(code, "unknown"),
+            if raw and len(raw) > GATT_DATA_BOTTLE_SIZE_OFFSET:
+                code = raw[GATT_DATA_BOTTLE_SIZE_OFFSET]
+                _LOGGER.info(
+                    "%s: bottle-size register byte[7]=0x%02X (%s)  [char0001=%s]",
+                    self.address, code,
+                    BYTE_TO_BOTTLE_SIZE.get(code, "unknown"), raw.hex(),
                 )
                 return BYTE_TO_BOTTLE_SIZE.get(code)
             return None
@@ -133,7 +137,7 @@ class GasolinaCoordinator:
         try:
             size = await self._gatt_trigger.run_on_next_advertisement(_read)
         except Exception as exc:  # noqa: BLE001
-            _LOGGER.warning("%s: GATT init read failed – %s", self.address, exc)
+            _LOGGER.debug("%s: GATT init read failed – %s", self.address, exc)
             return
 
         if self._bottle_size_user_set:
@@ -143,46 +147,6 @@ class GasolinaCoordinator:
             _LOGGER.info("%s: bottle size from GATT = %s", self.address, size)
             self.bottle_size = size
             self._notify_listeners()
-
-    async def _async_dump_gatt(self) -> None:
-        """One-shot diagnostic: connect and log the full GATT table.
-
-        Logs every service + characteristic with its properties and current
-        readable value, so we can identify which characteristic actually
-        stores the bottle size (the one that reads 0x06 for an 11kg bottle).
-        """
-        async def _dump(client):
-            import asyncio as _asyncio
-            _LOGGER.warning("=== GATT-DUMP for %s START ===", self.address)
-            services = client.services
-            try:
-                service_list = list(services)
-            except TypeError:
-                service_list = list(getattr(services, "services", {}).values())
-            for service in service_list:
-                _LOGGER.warning("GATT-DUMP service %s", service.uuid)
-                for char in service.characteristics:
-                    props = ",".join(char.properties)
-                    value_hex = "-"
-                    if "read" in char.properties:
-                        try:
-                            raw = await _asyncio.wait_for(
-                                client.read_gatt_char(char.uuid), timeout=3.0
-                            )
-                            value_hex = raw.hex() if raw else "empty"
-                        except Exception as exc:  # noqa: BLE001
-                            value_hex = f"read-error:{exc}"
-                    _LOGGER.warning(
-                        "GATT-DUMP   char %s [%s] = %s",
-                        char.uuid, props, value_hex,
-                    )
-            _LOGGER.warning("=== GATT-DUMP for %s END ===", self.address)
-            return True
-
-        try:
-            await self._gatt_trigger.run_on_next_advertisement(_dump)
-        except Exception as exc:  # noqa: BLE001
-            _LOGGER.warning("%s: GATT dump failed – %s", self.address, exc)
 
     @callback
     def _async_periodic_gatt_read(self, _now=None) -> None:
@@ -202,8 +166,22 @@ class GasolinaCoordinator:
         self._notify_listeners()
 
     async def async_write_bottle_size(self, bottle_size: str) -> bool:
-        """Write bottle size via GATT, waiting for the next advertisement first."""
-        from .gatt import BOTTLE_SIZE_TO_BYTE, _connect_and_run
+        """Attempt to set the bottle size via GATT and verify via char 0001 byte[7].
+
+        NOTE: the exact command the official app uses to change the bottle size
+        is not yet known (it is NOT a plain byte write to char 0002 or 0003 –
+        both were verified to leave byte[7] unchanged). This method therefore
+        writes the size code to the command characteristic and then *verifies*
+        the result by reading byte[7]; it only returns True if the register
+        actually changed. Once the real command sequence is captured from an
+        HCI log, only the write payload below needs updating.
+        """
+        from .const import (
+            BOTTLE_SIZE_TO_BYTE,
+            GATT_CHAR_CMD_UUID,
+            GATT_CHAR_DATA_UUID,
+            GATT_DATA_BOTTLE_SIZE_OFFSET,
+        )
         import asyncio
 
         write_byte = BOTTLE_SIZE_TO_BYTE.get(bottle_size)
@@ -211,78 +189,42 @@ class GasolinaCoordinator:
             return False
 
         async def _write(client):
-            from .const import GATT_CHAR_CMD_UUID, GATT_CHAR_DATA_UUID
-
-            async def _size_byte():
-                """Read char 0001 and return byte[7] (the bottle-size register)."""
-                try:
-                    raw = await asyncio.wait_for(
-                        client.read_gatt_char(GATT_CHAR_DATA_UUID), timeout=4.0
-                    )
-                    if raw and len(raw) > 7:
-                        return raw[7], raw.hex()
-                    return None, (raw.hex() if raw else "empty")
-                except Exception as exc:  # noqa: BLE001
-                    return None, f"err:{type(exc).__name__}"
-
             await asyncio.sleep(2.0)
-
-            # WRITE FIRST (most critical op – do it while the link is freshest)
+            # Write the size code to the command characteristic (acknowledged).
             await asyncio.wait_for(
                 client.write_gatt_char(
                     GATT_CHAR_CMD_UUID, bytes([write_byte]), response=True
                 ),
                 timeout=8.0,
             )
-            _LOGGER.warning(
-                "%s: SIZE-TEST wrote 0x%02X (%s) to cmd 0003 (acknowledged)",
-                self.address, write_byte, bottle_size,
-            )
             await asyncio.sleep(1.5)
+            # Verify via the real register (char 0001 byte[7]).
+            for _ in range(3):
+                try:
+                    raw = await asyncio.wait_for(
+                        client.read_gatt_char(GATT_CHAR_DATA_UUID), timeout=4.0
+                    )
+                except Exception:  # noqa: BLE001
+                    await asyncio.sleep(1.5)
+                    continue
+                if raw and len(raw) > GATT_DATA_BOTTLE_SIZE_OFFSET:
+                    return raw[GATT_DATA_BOTTLE_SIZE_OFFSET] == write_byte
+            return False
 
-            # Verify via char 0001 byte[7] – give the read several chances
-            after_b = None
-            for vtry in range(3):
-                after_b, after_hex = await _size_byte()
-                _LOGGER.warning(
-                    "%s: SIZE-TEST verify%d → byte7=%s  0001=%s",
-                    self.address, vtry,
-                    ("0x%02X" % after_b) if after_b is not None else "?",
-                    after_hex,
-                )
-                if after_b is not None:
-                    break
-                await asyncio.sleep(1.5)
-
-            ok = after_b == write_byte
-            _LOGGER.warning(
-                "%s: SIZE-TEST result → %s (wanted 0x%02X, got %s)",
-                self.address, "SUCCESS" if ok else "NO-CHANGE/UNVERIFIED",
-                write_byte,
-                ("0x%02X" % after_b) if after_b is not None else "?",
-            )
-            await asyncio.sleep(1.0)
-            return ok
-
-        # Retry the whole connect+write up to 5 times to beat error-133 flakiness
-        last_exc = None
-        for attempt in range(1, 6):
+        for attempt in range(1, 4):
             try:
-                _LOGGER.warning(
-                    "%s: bottle-size write attempt %d/5", self.address, attempt
-                )
-                result = await self._gatt_trigger.run_on_next_advertisement(_write)
-                if result is True:
+                if await self._gatt_trigger.run_on_next_advertisement(_write) is True:
+                    _LOGGER.info("%s: bottle size set to %s (verified)", self.address, bottle_size)
                     return True
             except Exception as exc:  # noqa: BLE001
-                last_exc = exc
-                _LOGGER.warning(
-                    "%s: write attempt %d failed – %s", self.address, attempt, exc
-                )
+                _LOGGER.debug("%s: write attempt %d failed – %s", self.address, attempt, exc)
             await asyncio.sleep(3.0)
 
-        if last_exc:
-            _LOGGER.error("%s: GATT write failed after retries – %s", self.address, last_exc)
+        _LOGGER.warning(
+            "%s: could not set bottle size to %s – the device did not accept the "
+            "command (the app's exact set-size sequence is not yet implemented).",
+            self.address, bottle_size,
+        )
         return False
 
     async def async_stop(self) -> None:
