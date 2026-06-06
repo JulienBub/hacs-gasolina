@@ -150,6 +150,12 @@ class GasolinaCoordinator:
         self.bottle_size = bottle_size
         self._notify_listeners()
 
+    def revert_bottle_size(self, previous: str) -> None:
+        """Revert an optimistic selection after a failed GATT write."""
+        self._bottle_size_user_set = False
+        self.bottle_size = previous
+        self._notify_listeners()
+
     async def async_write_bottle_size(self, bottle_size: str) -> bool:
         """Write bottle size via GATT, waiting for the next advertisement first."""
         from .gatt import BOTTLE_SIZE_TO_BYTE, _connect_and_run
