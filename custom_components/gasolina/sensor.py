@@ -10,9 +10,8 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-# Note: SensorDeviceClass is still used for battery
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE
+from homeassistant.const import PERCENTAGE, UnitOfLength
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -34,6 +33,7 @@ SENSOR_DESCRIPTIONS: tuple[GasolinaSensorEntityDescription, ...] = (
         name="Füllstand",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
         value_fn=lambda d: d.fill_level,
     ),
     GasolinaSensorEntityDescription(
@@ -43,6 +43,16 @@ SENSOR_DESCRIPTIONS: tuple[GasolinaSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda d: d.battery,
+    ),
+    GasolinaSensorEntityDescription(
+        key="liquid_depth",
+        name="Füllhöhe",
+        native_unit_of_measurement=UnitOfLength.CENTIMETERS,
+        device_class=SensorDeviceClass.DISTANCE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        icon="mdi:ruler",
+        value_fn=lambda d: d.liquid_depth,
     ),
 )
 
@@ -76,8 +86,8 @@ class GasolinaSensor(SensorEntity):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.address)},
             name=f"Gasolina {coordinator.address[-5:]}",
-            manufacturer="Gasolina",
-            model="Gas Bottle Sensor",
+            manufacturer="Thincke Inc",
+            model="Gas Bottle Sensor (UTS_MIN)",
         )
 
     @property
