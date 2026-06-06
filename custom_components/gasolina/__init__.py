@@ -8,7 +8,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN, SCAN_INTERVAL_OPTIONS
+from .const import (
+    CONF_SCAN_INTERVAL,
+    DEFAULT_BOTTLE_SIZE,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    SCAN_INTERVAL_OPTIONS,
+)
 from .coordinator import GasolinaCoordinator
 
 _LOGGER = logging.getLogger(__name__)
