@@ -13,7 +13,7 @@ from .coordinator import GasolinaCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.SENSOR, Platform.SELECT]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -22,11 +22,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     coordinator = GasolinaCoordinator(hass, address)
 
+    # Seed initial data from last seen advertisement (if any)
     if service_info := async_last_service_info(hass, address):
         from .models import parse_advertisement
         coordinator.data = parse_advertisement(service_info)
 
-    await coordinator.async_start()
+    await coordinator.async_start()  # also triggers async GATT bottle-size read
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
