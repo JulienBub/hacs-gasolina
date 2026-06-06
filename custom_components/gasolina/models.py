@@ -38,8 +38,10 @@ def parse_advertisement(service_info: BluetoothServiceInfoBleak) -> GasolinaData
 
 
 def is_gasolina_device(service_info: BluetoothServiceInfoBleak) -> bool:
-    """Return True if this advertisement looks like a Gasolina sensor."""
-    return (
-        MANUFACTURER_ID in service_info.manufacturer_data
-        and (service_info.name or "").startswith("@UTS")
-    )
+    """Return True if this advertisement looks like a Gasolina sensor.
+
+    Primary signal: Company ID 0x0211 (Telink) in manufacturer data.
+    The local name (@UTS…) is a secondary hint but not always present in the
+    HA Bluetooth cache, so we do NOT require it here.
+    """
+    return MANUFACTURER_ID in service_info.manufacturer_data
