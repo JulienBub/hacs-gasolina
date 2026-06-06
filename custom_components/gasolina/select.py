@@ -15,7 +15,7 @@ from .gatt import async_write_bottle_size
 
 _LOGGER = logging.getLogger(__name__)
 
-BOTTLE_SIZE_OPTIONS = list(BOTTLE_SIZE_TO_BYTE.keys())  # ["5kg","8kg","11kg","19kg"]
+BOTTLE_SIZE_OPTIONS = list(BOTTLE_SIZE_TO_BYTE.keys())
 
 
 async def async_setup_entry(
@@ -23,7 +23,6 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the bottle-size select entity."""
     coordinator: GasolinaCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([GasolinaBottleSizeSelect(coordinator)])
 
@@ -50,23 +49,25 @@ class GasolinaBottleSizeSelect(SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         """Write the new bottle size to the device via GATT."""
-        _LOGGER.info(
-            "Setting bottle size to %s for %s", option, self._coordinator.address
-        )
+        _LOGGER.info("Setting bottle size to %s for %s", option, self._coordinator.address)
+
+        # Mark as user-set BEFORE the write so the async init task cannot override it
+        self._coordinator.set_bottle_size_from_user(option)
+        self._attr_current_option = option
+        self.async_write_ha_state()
+
+        # Write to device (fire-and-forget result; UI is already updated optimistically)
         success = await async_write_bottle_size(
             self.hass, self._coordinator.address, option
         )
-        if success:
-            self._coordinator.bottle_size = option
-            self._attr_current_option = option
-            self.async_write_ha_state()
-        else:
+        if not success:
             _LOGGER.warning(
-                "Failed to set bottle size – check ESP32 proxy connection"
+                "%s: GATT write failed – check ESP32 proxy. "
+                "Selection shown but device may not have updated.",
+                self._coordinator.address,
             )
 
     async def async_added_to_hass(self) -> None:
-        """Update state when coordinator gets new bottle_size (e.g. after GATT read)."""
         self.async_on_remove(
             self._coordinator.async_add_listener(self._handle_coordinator_update)
         )
