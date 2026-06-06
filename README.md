@@ -37,8 +37,6 @@ Der Sensor kommuniziert **passiv per Bluetooth Low Energy (BLE)** – kein Pairi
   - Eingebauter BT-Adapter im HA-Host
   - [ESPHome Bluetooth Proxy](https://esphome.io/components/bluetooth_proxy.html) (empfohlen für größere Wohnungen)
 
-> **Kein Tuya-Gateway nötig!** Die Integration liest die BLE-Advertisements passiv – genauso wie die Gasolina-App.
-
 ---
 
 ## Installation via HACS
@@ -105,33 +103,10 @@ Alle Gasolina-Sensoren verwenden den Präfix `@UTS` gefolgt von Teilen der MAC-A
 
 ---
 
-## Hardware
+## Hinweis
 
-| Eigenschaft | Wert |
-|---|---|
-| Hersteller (OEM) | Thincke Inc, Xi'an, China |
-| Modell | UTS_MIN V1.3 |
-| BLE-Chip | Telink Semiconductor (Company ID `0x0211`) |
-| Batterie | CR2032 (1–2 Jahre Laufzeit) |
-| Schutzklasse | IP55 |
-| Befestigung | Magnet, außen auf dem Flaschenboden |
-| BLE-Reichweite | 150 m (Freifeld), ~25 m (an Flasche) |
-
----
-
-## Bekannte Einschränkungen
-
-- **8 kg** echo_max = 116 ist eine Schätzung – Bestätigung durch Leer-Flaschenscan steht aus
-- Die Integration arbeitet **rein passiv** – Flaschenkonfiguration (Größe) muss einmalig in der Gasolina-App oder per Tuya-Gateway vorgenommen werden
-- Der Sensor misst keine Temperatur (kein Temperatursensor in der Hardware vorhanden)
-
----
-
-## Mitwirken
-
-PRs willkommen! Besonders gesucht:
-- Bestätigung des echo_max-Werts für **8 kg** (Leer-Scan via nRF Connect)
-- Testergebnisse mit weiteren Flaschengrößen
+> ⚠️ **Diese Integration wurde vollständig mit Hilfe von KI (Claude) entwickelt.**  
+> Das BLE-Protokoll des Gasolina-Sensors ist nicht öffentlich dokumentiert und wurde durch systematisches Reverse Engineering der BLE-Advertisements mittels nRF Connect (iOS) erarbeitet. Die Kalibrierungswerte (echo_max) basieren auf realen Messungen und Kreuz-Kalibrierungen. Angaben ohne Gewähr.
 
 ---
 
