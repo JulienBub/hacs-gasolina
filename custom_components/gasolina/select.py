@@ -58,6 +58,8 @@ class GasolinaBottleSizeSelect(SelectEntity):
             self._coordinator.address, option,
         )
 
+        previous = self._coordinator.bottle_size
+
         # Mark as user-set BEFORE the write – prevents init task from overriding
         self._coordinator.set_bottle_size_from_user(option)
         self._attr_current_option = option
@@ -66,10 +68,16 @@ class GasolinaBottleSizeSelect(SelectEntity):
         success = await self._coordinator.async_write_bottle_size(option)
         if not success:
             _LOGGER.warning(
-                "%s: GATT write failed – try pressing the SYNC button on the "
-                "sensor for 5 s to enter pairing mode, then retry.",
-                self._coordinator.address,
+                "%s: GATT write failed – device did not accept %s. "
+                "Reverting to %s. The sensor likely requires a bonded "
+                "connection that the ESP32 proxy cannot establish.",
+                self._coordinator.address, option, previous,
             )
+            # Revert the optimistic UI change so we don't show a value
+            # the device never actually stored.
+            self._coordinator.revert_bottle_size(previous)
+            self._attr_current_option = previous
+            self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
         self.async_on_remove(
