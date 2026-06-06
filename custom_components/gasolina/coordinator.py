@@ -13,7 +13,6 @@ from homeassistant.components.bluetooth import (
 )
 from homeassistant.core import HomeAssistant, callback
 
-from .const import DEFAULT_BOTTLE_SIZE
 from .models import GasolinaData, parse_advertisement
 
 _LOGGER = logging.getLogger(__name__)
@@ -22,15 +21,9 @@ _LOGGER = logging.getLogger(__name__)
 class GasolinaCoordinator:
     """Manages passive BLE updates for a single Gasolina sensor."""
 
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        address: str,
-        bottle_size: str = DEFAULT_BOTTLE_SIZE,
-    ) -> None:
+    def __init__(self, hass: HomeAssistant, address: str) -> None:
         self.hass = hass
         self.address = address
-        self.bottle_size = bottle_size
         self.data: GasolinaData | None = None
         self._listeners: list[Callable[[], None]] = []
         self._cancel_callback: Callable[[], None] | None = None
@@ -49,7 +42,7 @@ class GasolinaCoordinator:
     def _async_handle_update(
         self, service_info: BluetoothServiceInfoBleak, change: BluetoothChange
     ) -> None:
-        new_data = parse_advertisement(service_info, self.bottle_size)
+        new_data = parse_advertisement(service_info)
         if new_data is None:
             return
         self.data = new_data
@@ -70,7 +63,7 @@ class GasolinaCoordinator:
             BluetoothCallbackMatcher(address=self.address),
             BluetoothScanningMode.PASSIVE,
         )
-        _LOGGER.debug("Started BLE listener for %s (bottle: %s)", self.address, self.bottle_size)
+        _LOGGER.debug("Started BLE listener for %s", self.address)
 
     async def async_stop(self) -> None:
         """Stop listening for BLE advertisements."""
