@@ -16,10 +16,10 @@ MIN_MANUFACTURER_DATA_LENGTH = 26
 #   Confirmed: 5kg=95, 11kg=139
 #   Estimated (linear interpolation): 8kg≈117, 19kg≈198  ← needs field verification
 BOTTLE_ECHO_MAX: dict[str, int] = {
-    "5kg":  95,
-    "8kg":  117,   # estimated – confirm with empty-bottle scan
-    "11kg": 139,
-    "19kg": 198,   # estimated – confirm with empty-bottle scan
+    "5kg":   95,   # confirmed: empty-bottle scan
+    "8kg":  116,   # estimated: quadratic fit through 5/11/19kg data points
+    "11kg": 139,   # confirmed: empty-bottle scan
+    "19kg": 206,   # confirmed: 139 × (89% / 60%) calibration cross-check
 }
 
 CONF_BOTTLE_SIZE = "bottle_size"
