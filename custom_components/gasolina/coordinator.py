@@ -24,22 +24,25 @@ _LOGGER = logging.getLogger(__name__)
 class GasolinaCoordinator:
     """Manages passive BLE updates and GATT operations for a single Gasolina sensor."""
 
-    def __init__(self, hass: HomeAssistant, address: str, scan_interval: int = 0) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        address: str,
+        scan_interval: int = 0,
+    ) -> None:
         self.hass = hass
         self.address = address
         self.bottle_size: str = DEFAULT_BOTTLE_SIZE
-        self.scan_interval: int = scan_interval  # seconds; 0 = disabled
+        self.scan_interval: int = scan_interval
         self.data: GasolinaData | None = None
         self._listeners: list[Callable[[], None]] = []
         self._cancel_callback: Callable[[], None] | None = None
         self._cancel_interval: Callable[[], None] | None = None
-        # Flag: True once user has explicitly set bottle size via select entity.
-        # Prevents the async GATT init task from overwriting the user's choice.
         self._bottle_size_user_set: bool = False
+        self._gatt_trigger = None  # GattOnAdvertisementTrigger, set in async_start
 
     @callback
     def async_add_listener(self, update_callback: Callable[[], None]) -> Callable[[], None]:
-        """Register a listener; returns a function that removes it."""
         self._listeners.append(update_callback)
 
         def remove() -> None:
@@ -59,6 +62,11 @@ class GasolinaCoordinator:
         if new_data is None:
             return
         self.data = new_data
+
+        # Notify the GATT trigger that the device is awake
+        if self._gatt_trigger is not None:
+            self._gatt_trigger.on_advertisement()
+
         _LOGGER.debug(
             "%s: fill=%.1f%% battery=%d%% bottle=%s",
             self.address,
@@ -69,7 +77,13 @@ class GasolinaCoordinator:
         self._notify_listeners()
 
     async def async_start(self) -> None:
-        """Start passive BLE listener, read bottle size via GATT, set up periodic scan."""
+        """Start passive BLE listener, GATT trigger, and periodic scan."""
+        from .gatt import GattOnAdvertisementTrigger
+
+        self._gatt_trigger = GattOnAdvertisementTrigger(
+            self.hass, self.address, timeout=120
+        )
+
         self._cancel_callback = async_register_callback(
             self.hass,
             self._async_handle_update,
@@ -78,51 +92,57 @@ class GasolinaCoordinator:
         )
         _LOGGER.debug("Started BLE listener for %s", self.address)
 
-        # Initial GATT read (non-blocking background task)
-        self.hass.async_create_task(self._async_gatt_read_bottle_size())
+        # Read bottle size after next advertisement (non-blocking)
+        self.hass.async_create_task(self._async_init_bottle_size())
 
-        # Periodic GATT read (if configured)
         if self.scan_interval > 0:
             self._cancel_interval = async_track_time_interval(
                 self.hass,
                 self._async_periodic_gatt_read,
                 timedelta(seconds=self.scan_interval),
             )
-            _LOGGER.debug(
-                "%s: periodic GATT scan every %ds", self.address, self.scan_interval
-            )
 
-    async def _async_gatt_read_bottle_size(self) -> None:
-        """Read bottle size from device via GATT.
-
-        Only updates coordinator.bottle_size if the user has NOT already
-        set it manually – prevents race-condition overwrite.
-        """
+    async def _async_init_bottle_size(self) -> None:
+        """Read bottle size on the next advertisement (device is awake then)."""
         if self._bottle_size_user_set:
-            _LOGGER.debug("%s: skipping GATT init read (user already set)", self.address)
             return
+
+        _LOGGER.debug(
+            "%s: waiting for advertisement before reading bottle size via GATT",
+            self.address,
+        )
 
         from .gatt import async_read_bottle_size
-        size = await async_read_bottle_size(self.hass, self.address)
 
-        # Guard again after the await – user might have set it while we were connecting
-        if self._bottle_size_user_set:
-            _LOGGER.debug(
-                "%s: discarding GATT read result (%s), user set it in the meantime",
-                self.address, size,
+        # Wait for the next fresh advertisement via trigger
+        async def _read(client):
+            from .const import GATT_CHAR_RW_UUID, BYTE_TO_BOTTLE_SIZE
+            import asyncio
+            raw = await asyncio.wait_for(
+                client.read_gatt_char(GATT_CHAR_RW_UUID), timeout=10.0
             )
+            if raw:
+                return BYTE_TO_BOTTLE_SIZE.get(raw[0], DEFAULT_BOTTLE_SIZE)
+            return DEFAULT_BOTTLE_SIZE
+
+        try:
+            size = await self._gatt_trigger.run_on_next_advertisement(_read)
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning("%s: GATT init read failed – %s", self.address, exc)
             return
 
-        if size != self.bottle_size:
+        if self._bottle_size_user_set:
+            return
+
+        if size and size != self.bottle_size:
             _LOGGER.info("%s: bottle size from GATT = %s", self.address, size)
             self.bottle_size = size
             self._notify_listeners()
 
     @callback
     def _async_periodic_gatt_read(self, _now=None) -> None:
-        """Trigger a periodic GATT bottle-size refresh."""
         if not self._bottle_size_user_set:
-            self.hass.async_create_task(self._async_gatt_read_bottle_size())
+            self.hass.async_create_task(self._async_init_bottle_size())
 
     def set_bottle_size_from_user(self, bottle_size: str) -> None:
         """Called by the select entity when the user explicitly picks a size."""
@@ -130,8 +150,35 @@ class GasolinaCoordinator:
         self.bottle_size = bottle_size
         self._notify_listeners()
 
+    async def async_write_bottle_size(self, bottle_size: str) -> bool:
+        """Write bottle size via GATT, waiting for the next advertisement first."""
+        from .gatt import BOTTLE_SIZE_TO_BYTE, _connect_and_run
+        import asyncio
+
+        write_byte = BOTTLE_SIZE_TO_BYTE.get(bottle_size)
+        if write_byte is None:
+            return False
+
+        async def _write(client):
+            from .const import GATT_CHAR_RW_UUID
+            await asyncio.wait_for(
+                client.write_gatt_char(GATT_CHAR_RW_UUID, bytes([write_byte]), response=False),
+                timeout=10.0,
+            )
+            _LOGGER.info(
+                "%s: bottle size set to %s (0x%02X) via GATT",
+                self.address, bottle_size, write_byte,
+            )
+            return True
+
+        try:
+            result = await self._gatt_trigger.run_on_next_advertisement(_write)
+            return result is True
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.error("%s: GATT write failed – %s", self.address, exc)
+            return False
+
     async def async_stop(self) -> None:
-        """Stop BLE listener and periodic scan."""
         if self._cancel_callback:
             self._cancel_callback()
             self._cancel_callback = None
