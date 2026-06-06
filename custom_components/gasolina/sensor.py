@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfLength
+from homeassistant.const import PERCENTAGE
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -34,6 +34,7 @@ SENSOR_DESCRIPTIONS: tuple[GasolinaSensorEntityDescription, ...] = (
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
+        icon="mdi:gas-cylinder",
         value_fn=lambda d: d.fill_level,
     ),
     GasolinaSensorEntityDescription(
@@ -43,16 +44,6 @@ SENSOR_DESCRIPTIONS: tuple[GasolinaSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda d: d.battery,
-    ),
-    GasolinaSensorEntityDescription(
-        key="liquid_depth",
-        name="Füllhöhe",
-        native_unit_of_measurement=UnitOfLength.CENTIMETERS,
-        device_class=SensorDeviceClass.DISTANCE,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=1,
-        icon="mdi:ruler",
-        value_fn=lambda d: d.liquid_depth,
     ),
 )
 
