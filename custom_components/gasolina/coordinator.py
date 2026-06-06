@@ -92,10 +92,8 @@ class GasolinaCoordinator:
         )
         _LOGGER.debug("Started BLE listener for %s", self.address)
 
-        # One-shot GATT diagnostic dump (full service/characteristic map).
-        # NOTE: temporarily the only on-start GATT op to avoid two concurrent
-        # connections fighting over the shared advertisement trigger.
-        self.hass.async_create_task(self._async_dump_gatt())
+        # (GATT map already captured; dump disabled. No on-start GATT op so the
+        # connection slot stays free for user-triggered bottle-size writes.)
 
         if self.scan_interval > 0:
             self._cancel_interval = async_track_time_interval(
@@ -208,35 +206,50 @@ class GasolinaCoordinator:
             return False
 
         async def _write(client):
-            from .const import GATT_CHAR_RW_UUID
-            # Write WITH response so the device actually ACKs the value.
-            # response=False (write-without-response) is fire-and-forget and
-            # the proxy reports success even when the device drops the write.
+            from .const import (
+                GATT_CHAR_CMD_UUID,
+                GATT_CHAR_DATA_UUID,
+                GATT_CHAR_RW_UUID,
+            )
+
+            async def _read_hex(uuid):
+                try:
+                    raw = await asyncio.wait_for(
+                        client.read_gatt_char(uuid), timeout=3.0
+                    )
+                    return raw.hex() if raw else "empty"
+                except Exception as exc:  # noqa: BLE001
+                    return f"err:{exc}"
+
+            # Snapshot BEFORE the write
+            before_cmd  = await _read_hex(GATT_CHAR_CMD_UUID)
+            before_data = await _read_hex(GATT_CHAR_DATA_UUID)
+            _LOGGER.warning(
+                "%s: WRITE-TEST before → cmd(0003)=%s data(0001)=%s",
+                self.address, before_cmd, before_data,
+            )
+
+            # Write the bottle-size byte to the COMMAND characteristic (0003),
+            # which supports acknowledged writes (response=True).
             await asyncio.wait_for(
-                client.write_gatt_char(GATT_CHAR_RW_UUID, bytes([write_byte]), response=True),
+                client.write_gatt_char(
+                    GATT_CHAR_CMD_UUID, bytes([write_byte]), response=True
+                ),
                 timeout=10.0,
             )
-            # Read back to confirm the device persisted the new value
-            try:
-                from .const import BYTE_TO_BOTTLE_SIZE
-                raw = await asyncio.wait_for(
-                    client.read_gatt_char(GATT_CHAR_RW_UUID), timeout=10.0
-                )
-                readback = BYTE_TO_BOTTLE_SIZE.get(raw[0]) if raw else None
-                _LOGGER.info(
-                    "%s: wrote 0x%02X (%s), device read-back = 0x%02X (%s)",
-                    self.address, write_byte, bottle_size,
-                    raw[0] if raw else 0, readback,
-                )
-                if readback != bottle_size:
-                    _LOGGER.warning(
-                        "%s: read-back mismatch – device did not persist %s "
-                        "(still reports %s). Likely needs a bonded connection.",
-                        self.address, bottle_size, readback,
-                    )
-                    return False
-            except Exception as exc:  # noqa: BLE001
-                _LOGGER.debug("%s: read-back after write failed – %s", self.address, exc)
+            _LOGGER.warning(
+                "%s: WRITE-TEST wrote 0x%02X (%s) to cmd char 0003",
+                self.address, write_byte, bottle_size,
+            )
+
+            # Snapshot AFTER the write
+            after_cmd  = await _read_hex(GATT_CHAR_CMD_UUID)
+            after_data = await _read_hex(GATT_CHAR_DATA_UUID)
+            after_rw   = await _read_hex(GATT_CHAR_RW_UUID)
+            _LOGGER.warning(
+                "%s: WRITE-TEST after  → cmd(0003)=%s data(0001)=%s rw(0002)=%s",
+                self.address, after_cmd, after_data, after_rw,
+            )
             return True
 
         try:
