@@ -6,21 +6,19 @@ MANUFACTURER_ID = 0x0211  # Telink Semiconductor Co. Ltd
 LOCAL_NAME_PREFIX = "@UTS"
 
 # Byte offsets within manufacturer data (after company ID bytes are stripped by HA)
+#
+# Confirmed via BLE advertisement sniffing (nRF Connect iOS):
+#
+#   data[4:6]  = fill level in per-mille (16-bit big-endian), device-internal filtered value
+#                → divide by 10 for %  (e.g. 0x0369 = 873 → 87.3%)
+#                  App rounds/displays as ~89%; this is the stable reading.
+#   data[6]    = battery level in %
+#
+# data[25] (raw echo units) is intentionally NOT used – it is the unfiltered
+# ultrasonic reading and fluctuates heavily (observed range: 70–90% on same fill).
+
+OFFSET_FILL_HIGH = 4   # fill level high byte (16-bit big-endian per-mille)
+OFFSET_FILL_LOW  = 5   # fill level low byte
 OFFSET_BATTERY   = 6   # battery level in %
-OFFSET_FILL_ECHO = 25  # fill echo units (0 = empty, echo_max = full)
 
-MIN_MANUFACTURER_DATA_LENGTH = 26
-
-# Echo-maximum per bottle size:
-#   = value of data[OFFSET_FILL_ECHO] when the bottle is 100% full
-#   Confirmed: 5kg=95, 11kg=139
-#   Estimated (linear interpolation): 8kg≈117, 19kg≈198  ← needs field verification
-BOTTLE_ECHO_MAX: dict[str, int] = {
-    "5kg":   95,   # confirmed: empty-bottle scan
-    "8kg":  116,   # estimated: quadratic fit through 5/11/19kg data points
-    "11kg": 139,   # confirmed: empty-bottle scan
-    "19kg": 206,   # confirmed: 139 × (89% / 60%) calibration cross-check
-}
-
-CONF_BOTTLE_SIZE = "bottle_size"
-DEFAULT_BOTTLE_SIZE = "11kg"
+MIN_MANUFACTURER_DATA_LENGTH = 7
