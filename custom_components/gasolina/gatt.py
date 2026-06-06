@@ -114,7 +114,7 @@ async def async_write_bottle_size(
         async def _write(client):
             await asyncio.wait_for(
                 client.write_gatt_char(
-                    GATT_CHAR_RW_UUID, bytes([write_byte]), response=False
+                    GATT_CHAR_RW_UUID, bytes([write_byte]), response=True
                 ),
                 timeout=_OP_TIMEOUT,
             )
