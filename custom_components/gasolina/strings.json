@@ -6,10 +6,6 @@
         "description": "Gefundene Gasolina-Sensoren werden unten angezeigt. Wähle deinen Sensor aus oder klicke auf **Erneut suchen**, falls noch keiner angezeigt wird.",
         "data": { "address": "Sensor" }
       },
-      "bluetooth_confirm": {
-        "title": "Gasolina Sensor gefunden",
-        "description": "Sensor **{name}** wurde gefunden. Klicke auf Weiter um ihn zu koppeln."
-      },
       "bond": {
         "title": "Sensor koppeln",
         "description": "**Drücke jetzt den SYNC-Knopf am Sensor für 5 Sekunden** bis die LED blinkt.\n\nKlicke danach innerhalb von 30 Sekunden auf **Koppeln** – Home Assistant verbindet sich einmalig mit dem Sensor.\n\nDieser Schritt ist nur beim ersten Einrichten nötig."
