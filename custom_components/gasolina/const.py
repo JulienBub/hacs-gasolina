@@ -14,7 +14,9 @@ MIN_MANUFACTURER_DATA_LENGTH = 7
 
 # ── GATT (active connection) ───────────────────────────────────────────────────
 GATT_SERVICE_UUID = "00001102-0000-1000-8000-00805f9b34fb"
-GATT_CHAR_RW_UUID = "00001102-0002-1000-8000-00805f9b34fb"
+GATT_CHAR_DATA_UUID = "00001102-0001-1000-8000-00805f9b34fb"  # live data (read,notify)
+GATT_CHAR_RW_UUID   = "00001102-0002-1000-8000-00805f9b34fb"  # scratch (reads 01020304)
+GATT_CHAR_CMD_UUID  = "00001102-0003-1000-8000-00805f9b34fb"  # command/config (write+notify)
 
 # Bottle size ↔ GATT write byte
 # Confirmed: 11kg=0x06  |  Pattern: 5kg=0x07, 8kg=0x08, 19kg=0x09
