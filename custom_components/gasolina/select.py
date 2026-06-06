@@ -11,7 +11,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import BOTTLE_SIZE_TO_BYTE, DOMAIN
 from .coordinator import GasolinaCoordinator
-from .gatt import async_write_bottle_size
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,22 +47,27 @@ class GasolinaBottleSizeSelect(SelectEntity):
         )
 
     async def async_select_option(self, option: str) -> None:
-        """Write the new bottle size to the device via GATT."""
-        _LOGGER.info("Setting bottle size to %s for %s", option, self._coordinator.address)
+        """Write the new bottle size to the device via GATT.
 
-        # Mark as user-set BEFORE the write so the async init task cannot override it
+        Marks user-set immediately (prevents race with init task), then waits
+        for the next BLE advertisement before attempting the GATT write so
+        the device is guaranteed to be awake.
+        """
+        _LOGGER.info(
+            "%s: bottle size change requested → %s (waiting for advertisement…)",
+            self._coordinator.address, option,
+        )
+
+        # Mark as user-set BEFORE the write – prevents init task from overriding
         self._coordinator.set_bottle_size_from_user(option)
         self._attr_current_option = option
         self.async_write_ha_state()
 
-        # Write to device (fire-and-forget result; UI is already updated optimistically)
-        success = await async_write_bottle_size(
-            self.hass, self._coordinator.address, option
-        )
+        success = await self._coordinator.async_write_bottle_size(option)
         if not success:
             _LOGGER.warning(
-                "%s: GATT write failed – check ESP32 proxy. "
-                "Selection shown but device may not have updated.",
+                "%s: GATT write failed – try pressing the SYNC button on the "
+                "sensor for 5 s to enter pairing mode, then retry.",
                 self._coordinator.address,
             )
 
