@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
+from .const import CONF_BOTTLE_SIZE, DEFAULT_BOTTLE_SIZE, DOMAIN
 from .coordinator import GasolinaCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -19,13 +19,13 @@ PLATFORMS = [Platform.SENSOR]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Gasolina from a config entry."""
     address: str = entry.data["address"]
+    bottle_size: str = entry.data.get(CONF_BOTTLE_SIZE, DEFAULT_BOTTLE_SIZE)
 
-    coordinator = GasolinaCoordinator(hass, address)
+    coordinator = GasolinaCoordinator(hass, address, bottle_size)
 
-    # Populate initial data from the last seen advertisement (if any)
     if service_info := async_last_service_info(hass, address):
         from .models import parse_advertisement
-        coordinator.data = parse_advertisement(service_info)
+        coordinator.data = parse_advertisement(service_info, bottle_size)
 
     await coordinator.async_start()
 
