@@ -92,8 +92,8 @@ class GasolinaCoordinator:
         )
         _LOGGER.debug("Started BLE listener for %s", self.address)
 
-        # (GATT map already captured; dump disabled. No on-start GATT op so the
-        # connection slot stays free for user-triggered bottle-size writes.)
+        # Read current bottle size from char 0001 byte[7] on the next advertisement
+        self.hass.async_create_task(self._async_init_bottle_size())
 
         if self.scan_interval > 0:
             self._cancel_interval = async_track_time_interval(
@@ -112,18 +112,23 @@ class GasolinaCoordinator:
             self.address,
         )
 
-        from .gatt import async_read_bottle_size
-
-        # Wait for the next fresh advertisement via trigger
+        # Single-op read of char 0001 byte[7] = the bottle-size register.
         async def _read(client):
-            from .const import GATT_CHAR_RW_UUID, BYTE_TO_BOTTLE_SIZE
+            from .const import GATT_CHAR_DATA_UUID, BYTE_TO_BOTTLE_SIZE
             import asyncio
+            await asyncio.sleep(1.5)
             raw = await asyncio.wait_for(
-                client.read_gatt_char(GATT_CHAR_RW_UUID), timeout=10.0
+                client.read_gatt_char(GATT_CHAR_DATA_UUID), timeout=6.0
             )
-            if raw:
-                return BYTE_TO_BOTTLE_SIZE.get(raw[0], DEFAULT_BOTTLE_SIZE)
-            return DEFAULT_BOTTLE_SIZE
+            if raw and len(raw) > 7:
+                code = raw[7]
+                _LOGGER.warning(
+                    "%s: SIZE-READ char0001=%s → byte7=0x%02X (%s)",
+                    self.address, raw.hex(), code,
+                    BYTE_TO_BOTTLE_SIZE.get(code, "unknown"),
+                )
+                return BYTE_TO_BOTTLE_SIZE.get(code)
+            return None
 
         try:
             size = await self._gatt_trigger.run_on_next_advertisement(_read)
