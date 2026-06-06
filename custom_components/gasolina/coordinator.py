@@ -206,71 +206,32 @@ class GasolinaCoordinator:
             return False
 
         async def _write(client):
-            from .const import (
-                GATT_CHAR_CMD_UUID,
-                GATT_CHAR_DATA_UUID,
-                GATT_CHAR_RW_UUID,
+            from .const import GATT_CHAR_CMD_UUID
+
+            # Minimal, single-operation session: settle, ONE acknowledged write,
+            # settle so the device can commit, then disconnect. No reads – every
+            # extra ATT op on this marginal link risks GATT error 133.
+            await asyncio.sleep(2.5)
+            await asyncio.wait_for(
+                client.write_gatt_char(
+                    GATT_CHAR_CMD_UUID, bytes([write_byte]), response=True
+                ),
+                timeout=8.0,
             )
-
-            # Let the freshly-opened link settle before any ATT operation –
-            # operating immediately after connect often yields GATT error 133.
-            await asyncio.sleep(1.5)
-
-            async def _read_hex(uuid):
-                try:
-                    raw = await asyncio.wait_for(
-                        client.read_gatt_char(uuid), timeout=4.0
-                    )
-                    return raw.hex() if raw else "empty"
-                except Exception as exc:  # noqa: BLE001
-                    return f"err:{type(exc).__name__}:{exc}"
-
-            before_cmd  = await _read_hex(GATT_CHAR_CMD_UUID)
-            before_data = await _read_hex(GATT_CHAR_DATA_UUID)
             _LOGGER.warning(
-                "%s: WRITE-TEST before → cmd(0003)=%s data(0001)=%s",
-                self.address, before_cmd, before_data,
+                "%s: WRITE-OK wrote 0x%02X (%s) to cmd char 0003 (acknowledged)",
+                self.address, write_byte, bottle_size,
             )
+            # Give the device time to persist before we tear down the link
+            await asyncio.sleep(2.5)
+            return True
 
-            # Try acknowledged write first (0003 supports 'write'); on failure
-            # fall back to write-without-response.
-            wrote = False
-            for resp in (True, False):
-                try:
-                    await asyncio.wait_for(
-                        client.write_gatt_char(
-                            GATT_CHAR_CMD_UUID, bytes([write_byte]), response=resp
-                        ),
-                        timeout=8.0,
-                    )
-                    _LOGGER.warning(
-                        "%s: WRITE-TEST wrote 0x%02X (%s) to cmd 0003 (response=%s)",
-                        self.address, write_byte, bottle_size, resp,
-                    )
-                    wrote = True
-                    break
-                except Exception as exc:  # noqa: BLE001
-                    _LOGGER.warning(
-                        "%s: WRITE-TEST write response=%s failed – %s",
-                        self.address, resp, exc,
-                    )
-                    await asyncio.sleep(0.5)
-
-            after_cmd  = await _read_hex(GATT_CHAR_CMD_UUID)
-            after_data = await _read_hex(GATT_CHAR_DATA_UUID)
-            after_rw   = await _read_hex(GATT_CHAR_RW_UUID)
-            _LOGGER.warning(
-                "%s: WRITE-TEST after  → cmd(0003)=%s data(0001)=%s rw(0002)=%s",
-                self.address, after_cmd, after_data, after_rw,
-            )
-            return wrote
-
-        # Retry the whole connect+write up to 3 times to beat error-133 flakiness
+        # Retry the whole connect+write up to 5 times to beat error-133 flakiness
         last_exc = None
-        for attempt in range(1, 4):
+        for attempt in range(1, 6):
             try:
                 _LOGGER.warning(
-                    "%s: bottle-size write attempt %d/3", self.address, attempt
+                    "%s: bottle-size write attempt %d/5", self.address, attempt
                 )
                 result = await self._gatt_trigger.run_on_next_advertisement(_write)
                 if result is True:
@@ -280,7 +241,7 @@ class GasolinaCoordinator:
                 _LOGGER.warning(
                     "%s: write attempt %d failed – %s", self.address, attempt, exc
                 )
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(3.0)
 
         if last_exc:
             _LOGGER.error("%s: GATT write failed after retries – %s", self.address, last_exc)
