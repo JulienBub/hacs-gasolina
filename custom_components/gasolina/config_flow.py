@@ -173,6 +173,7 @@ class GasolinaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def _async_attempt_bond(self) -> str:
         try:
             from bleak import BleakClient
+            from bleak_retry_connector import establish_connection
             from homeassistant.components.bluetooth import async_ble_device_from_address
 
             device = async_ble_device_from_address(
@@ -181,12 +182,19 @@ class GasolinaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if device is None:
                 return "bond_failed"
 
-            async with BleakClient(device, timeout=_BOND_TIMEOUT) as client:
-                try:
-                    await asyncio.wait_for(client.pair(), timeout=15.0)
-                    _LOGGER.info("%s: initial BLE bond established ✓", self._address)
-                except Exception as exc:  # noqa: BLE001
-                    _LOGGER.debug("%s: pair() optional – %s", self._address, exc)
+            client = await establish_connection(
+                BleakClient,
+                device,
+                self._address,
+                max_attempts=2,
+            )
+            try:
+                await asyncio.wait_for(client.pair(), timeout=15.0)
+                _LOGGER.info("%s: initial BLE bond established ✓", self._address)
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.debug("%s: pair() optional – %s", self._address, exc)
+            finally:
+                await client.disconnect()
             return "ok"
 
         except asyncio.TimeoutError:
