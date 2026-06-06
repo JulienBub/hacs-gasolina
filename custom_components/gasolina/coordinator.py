@@ -206,53 +206,60 @@ class GasolinaCoordinator:
             return False
 
         async def _write(client):
-            from .const import GATT_CHAR_RW_UUID, GATT_CHAR_DATA_UUID
+            from .const import GATT_CHAR_CMD_UUID, GATT_CHAR_DATA_UUID
 
-            async def _read_hex(uuid):
+            async def _size_byte():
+                """Read char 0001 and return byte[7] (the bottle-size register)."""
                 try:
-                    raw = await asyncio.wait_for(client.read_gatt_char(uuid), timeout=4.0)
-                    return raw.hex() if raw else "empty"
+                    raw = await asyncio.wait_for(
+                        client.read_gatt_char(GATT_CHAR_DATA_UUID), timeout=4.0
+                    )
+                    if raw and len(raw) > 7:
+                        return raw[7], raw.hex()
+                    return None, (raw.hex() if raw else "empty")
                 except Exception as exc:  # noqa: BLE001
-                    return f"err:{type(exc).__name__}"
+                    return None, f"err:{type(exc).__name__}"
 
             await asyncio.sleep(2.5)
 
-            # CHAR-0002 EXPERIMENT: read current 4-byte register, then write it
-            # back with the last byte replaced by the bottle-size code.
-            before_002 = await _read_hex(GATT_CHAR_RW_UUID)
-            before_001 = await _read_hex(GATT_CHAR_DATA_UUID)
+            before_b, before_hex = await _size_byte()
             _LOGGER.warning(
-                "%s: C0002-TEST before → 0002=%s 0001=%s",
-                self.address, before_002, before_001,
+                "%s: SIZE-TEST before → byte7=%s  0001=%s",
+                self.address,
+                ("0x%02X" % before_b) if before_b is not None else "?",
+                before_hex,
             )
 
-            # Build a 4-byte payload from the current value with byte[3]=code.
-            try:
-                cur = bytes.fromhex(before_002) if before_002 and ":" not in before_002 and "err" not in before_002 else b"\x01\x02\x03\x04"
-            except ValueError:
-                cur = b"\x01\x02\x03\x04"
-            if len(cur) < 4:
-                cur = (cur + b"\x00\x00\x00\x00")[:4]
-            payload = bytes([cur[0], cur[1], cur[2], write_byte])
-
+            # Write the bottle-size code to the COMMAND characteristic (0003),
+            # acknowledged. Then verify via char 0001 byte[7] (the real register).
             await asyncio.wait_for(
-                client.write_gatt_char(GATT_CHAR_RW_UUID, payload, response=False),
+                client.write_gatt_char(
+                    GATT_CHAR_CMD_UUID, bytes([write_byte]), response=True
+                ),
                 timeout=8.0,
             )
             _LOGGER.warning(
-                "%s: C0002-TEST wrote %s (size byte 0x%02X=%s) to char 0002",
-                self.address, payload.hex(), write_byte, bottle_size,
+                "%s: SIZE-TEST wrote 0x%02X (%s) to cmd 0003",
+                self.address, write_byte, bottle_size,
             )
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(2.0)
 
-            after_002 = await _read_hex(GATT_CHAR_RW_UUID)
-            after_001 = await _read_hex(GATT_CHAR_DATA_UUID)
+            after_b, after_hex = await _size_byte()
             _LOGGER.warning(
-                "%s: C0002-TEST after  → 0002=%s 0001=%s",
-                self.address, after_002, after_001,
+                "%s: SIZE-TEST after  → byte7=%s  0001=%s",
+                self.address,
+                ("0x%02X" % after_b) if after_b is not None else "?",
+                after_hex,
             )
-            await asyncio.sleep(1.5)
-            return True
+            ok = after_b == write_byte
+            _LOGGER.warning(
+                "%s: SIZE-TEST result → %s (wanted 0x%02X, got %s)",
+                self.address, "SUCCESS" if ok else "NO-CHANGE",
+                write_byte,
+                ("0x%02X" % after_b) if after_b is not None else "?",
+            )
+            await asyncio.sleep(1.0)
+            return ok
 
         # Retry the whole connect+write up to 5 times to beat error-133 flakiness
         last_exc = None
