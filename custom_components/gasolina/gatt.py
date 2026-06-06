@@ -51,14 +51,14 @@ async def _connect_and_run(hass: HomeAssistant, address: str, coro_factory):
         _LOGGER.warning("%s: no connectable BLE device found", address)
         return None
 
-    _LOGGER.warning("%s: GATT connecting (establish_connection)…", address)
+    _LOGGER.debug("%s: GATT connecting (establish_connection)…", address)
     client = await establish_connection(
         BleakClient,
         device,
         address,
         max_attempts=3,
     )
-    _LOGGER.warning("%s: GATT connected ✓", address)
+    _LOGGER.debug("%s: GATT connected", address)
     try:
         # NOTE: we deliberately do NOT call client.pair() here. On this device
         # via the ESP32 proxy pairing always fails (error 82) and appears to
