@@ -161,14 +161,34 @@ class GasolinaCoordinator:
 
         async def _write(client):
             from .const import GATT_CHAR_RW_UUID
+            # Write WITH response so the device actually ACKs the value.
+            # response=False (write-without-response) is fire-and-forget and
+            # the proxy reports success even when the device drops the write.
             await asyncio.wait_for(
-                client.write_gatt_char(GATT_CHAR_RW_UUID, bytes([write_byte]), response=False),
+                client.write_gatt_char(GATT_CHAR_RW_UUID, bytes([write_byte]), response=True),
                 timeout=10.0,
             )
-            _LOGGER.info(
-                "%s: bottle size set to %s (0x%02X) via GATT",
-                self.address, bottle_size, write_byte,
-            )
+            # Read back to confirm the device persisted the new value
+            try:
+                from .const import BYTE_TO_BOTTLE_SIZE
+                raw = await asyncio.wait_for(
+                    client.read_gatt_char(GATT_CHAR_RW_UUID), timeout=10.0
+                )
+                readback = BYTE_TO_BOTTLE_SIZE.get(raw[0]) if raw else None
+                _LOGGER.info(
+                    "%s: wrote 0x%02X (%s), device read-back = 0x%02X (%s)",
+                    self.address, write_byte, bottle_size,
+                    raw[0] if raw else 0, readback,
+                )
+                if readback != bottle_size:
+                    _LOGGER.warning(
+                        "%s: read-back mismatch – device did not persist %s "
+                        "(still reports %s). Likely needs a bonded connection.",
+                        self.address, bottle_size, readback,
+                    )
+                    return False
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.debug("%s: read-back after write failed – %s", self.address, exc)
             return True
 
         try:
