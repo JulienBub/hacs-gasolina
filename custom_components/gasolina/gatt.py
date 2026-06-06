@@ -60,16 +60,15 @@ async def _connect_and_run(hass: HomeAssistant, address: str, coro_factory):
     )
     _LOGGER.warning("%s: GATT connected ✓", address)
     try:
-        # Try to pair/bond (required on first connection; harmless afterwards)
-        try:
-            await asyncio.wait_for(client.pair(), timeout=_OP_TIMEOUT)
-            _LOGGER.debug("%s: BLE pairing/bonding complete", address)
-        except Exception as exc:  # noqa: BLE001
-            _LOGGER.debug("%s: pair() skipped or not required – %s", address, exc)
-
+        # NOTE: we deliberately do NOT call client.pair() here. On this device
+        # via the ESP32 proxy pairing always fails (error 82) and appears to
+        # destabilise the link. Reads/writes are attempted on the open link.
         return await coro_factory(client)
     finally:
-        await client.disconnect()
+        try:
+            await client.disconnect()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 # ---------------------------------------------------------------------------
