@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfTemperature
+from homeassistant.const import PERCENTAGE
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -24,7 +24,7 @@ from .models import GasolinaData
 @dataclass(frozen=True)
 class GasolinaSensorEntityDescription(SensorEntityDescription):
     """Describes a Gasolina sensor entity."""
-    value_fn: Callable[[GasolinaData], int | float | None] = lambda _: None
+    value_fn: Callable[[GasolinaData], int | float | str | None] = lambda _: None
 
 
 SENSOR_DESCRIPTIONS: tuple[GasolinaSensorEntityDescription, ...] = (
@@ -33,6 +33,8 @@ SENSOR_DESCRIPTIONS: tuple[GasolinaSensorEntityDescription, ...] = (
         name="Füllstand",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        icon="mdi:gas-cylinder",
         value_fn=lambda d: d.fill_level,
     ),
     GasolinaSensorEntityDescription(
@@ -42,14 +44,6 @@ SENSOR_DESCRIPTIONS: tuple[GasolinaSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda d: d.battery,
-    ),
-    GasolinaSensorEntityDescription(
-        key="temperature",
-        name="Temperatur",
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        device_class=SensorDeviceClass.TEMPERATURE,
-        state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda d: d.temperature,
     ),
 )
 
@@ -83,12 +77,12 @@ class GasolinaSensor(SensorEntity):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.address)},
             name=f"Gasolina {coordinator.address[-5:]}",
-            manufacturer="Gasolina",
-            model="Gas Bottle Sensor",
+            manufacturer="Thincke Inc",
+            model="Gas Bottle Sensor (UTS_MIN)",
         )
 
     @property
-    def native_value(self) -> int | float | None:
+    def native_value(self) -> int | float | str | None:
         if self._coordinator.data is None:
             return None
         return self.entity_description.value_fn(self._coordinator.data)

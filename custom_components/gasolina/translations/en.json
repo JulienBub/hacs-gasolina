@@ -1,22 +1,39 @@
 {
   "config": {
     "step": {
-      "user": {
-        "title": "Add Gasolina Sensor",
-        "description": "Select a discovered Gasolina sensor.",
-        "data": {
-          "address": "Sensor"
-        }
+      "scan": {
+        "title": "Search for Gasolina Sensor",
+        "description": "Found Gasolina sensors are shown below. Select your sensor, or click **Scan again** if none appear yet.",
+        "data": { "address": "Sensor" }
       },
-      "bluetooth_confirm": {
-        "title": "Gasolina Sensor Found",
-        "description": "Do you want to add the sensor **{name}**?"
+      "bond": {
+        "title": "Pair Sensor",
+        "description": "**Press the SYNC button on the sensor for 5 seconds**.\n\nThen click **OK** within 30 seconds – Home Assistant will connect to the sensor once to establish a Bluetooth bond.\n\nThis step is only required during initial setup."
+      },
+      "bottle_size": {
+        "title": "Choose Bottle Size",
+        "description": "Select your gas bottle size. This is required for accurate fill level calculation.",
+        "data": { "bottle_size": "Bottle size" }
       }
+    },
+    "error": {
+      "bond_failed": "Connection failed. Make sure the SYNC button was pressed and the sensor is in range.",
+      "bond_timeout": "Connection timed out. Press the SYNC button again and click Pair immediately.",
+      "no_devices_found_yet": "No sensor found yet. Click 'Scan again' (the sensor broadcasts every ~60 seconds)."
     },
     "abort": {
       "already_configured": "This sensor is already configured.",
-      "no_devices_found": "No Gasolina sensor found nearby. Make sure the sensor is powered on and in range.",
+      "no_devices_found": "No Gasolina sensor found nearby.",
       "not_supported": "This device is not supported."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Gasolina Options",
+        "description": "Periodic bottle size refresh via Bluetooth.\n\n⚠️ Frequent connections increase the sensor's battery drain.",
+        "data": { "scan_interval": "Update interval" }
+      }
     }
   }
 }

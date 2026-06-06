@@ -1,22 +1,39 @@
 {
   "config": {
     "step": {
-      "user": {
-        "title": "Gasolina Sensor hinzufügen",
-        "description": "Wähle einen gefundenen Gasolina-Sensor aus.",
-        "data": {
-          "address": "Sensor"
-        }
+      "scan": {
+        "title": "Gasolina Sensor suchen",
+        "description": "Gefundene Gasolina-Sensoren werden unten angezeigt. Wähle deinen Sensor aus oder klicke auf **Erneut suchen**, falls noch keiner angezeigt wird.",
+        "data": { "address": "Sensor" }
       },
-      "bluetooth_confirm": {
-        "title": "Gasolina Sensor gefunden",
-        "description": "Möchtest du den Sensor **{name}** hinzufügen?"
+      "bond": {
+        "title": "Sensor koppeln",
+        "description": "**Drücke jetzt den SYNC-Knopf am Sensor für 5 Sekunden**.\n\nKlicke danach innerhalb von 30 Sekunden auf **OK** – Home Assistant verbindet sich einmalig mit dem Sensor.\n\nDieser Schritt ist nur beim ersten Einrichten nötig."
+      },
+      "bottle_size": {
+        "title": "Flaschengröße wählen",
+        "description": "Wähle die Größe deiner Gasflasche. Diese wird für die genaue Füllstandsberechnung benötigt.",
+        "data": { "bottle_size": "Flaschengröße" }
       }
+    },
+    "error": {
+      "bond_failed": "Verbindung fehlgeschlagen. Stelle sicher, dass der SYNC-Knopf gedrückt wurde und der Sensor in Reichweite ist.",
+      "bond_timeout": "Zeitüberschreitung. Drücke den SYNC-Knopf erneut und klicke sofort auf Koppeln.",
+      "no_devices_found_yet": "Noch kein Sensor gefunden. Klicke auf 'Erneut suchen' um nochmals zu scannen (der Sensor sendet alle ~60 Sekunden)."
     },
     "abort": {
       "already_configured": "Dieser Sensor ist bereits eingerichtet.",
-      "no_devices_found": "Kein Gasolina-Sensor in der Nähe gefunden. Stelle sicher, dass der Sensor eingeschaltet und in Reichweite ist.",
+      "no_devices_found": "Kein Gasolina-Sensor in der Nähe gefunden.",
       "not_supported": "Dieses Gerät wird nicht unterstützt."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Gasolina Einstellungen",
+        "description": "Periodische Flaschengröße-Aktualisierung via Bluetooth.\n\n⚠️ Häufige Verbindungen erhöhen den Akkuverbrauch des Sensors.",
+        "data": { "scan_interval": "Aktualisierungsintervall" }
+      }
     }
   }
 }
