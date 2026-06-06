@@ -1,9 +1,9 @@
 {
   "config": {
     "step": {
-      "user": {
-        "title": "Gasolina Sensor hinzufügen",
-        "description": "Wähle einen gefundenen Gasolina-Sensor aus.",
+      "scan": {
+        "title": "Gasolina Sensor suchen",
+        "description": "Gefundene Gasolina-Sensoren werden unten angezeigt. Wähle deinen Sensor aus oder klicke auf **Erneut suchen**, falls noch keiner angezeigt wird.",
         "data": { "address": "Sensor" }
       },
       "bluetooth_confirm": {
@@ -12,13 +12,19 @@
       },
       "bond": {
         "title": "Sensor koppeln",
-        "description": "**Drücke jetzt den SYNC-Knopf am Sensor für 5 Sekunden** bis die LED blinkt.\n\nKlicke danach innerhalb von 30 Sekunden auf **Koppeln** – Home Assistant verbindet sich einmalig mit dem Sensor um eine Bluetooth-Verbindung herzustellen.\n\nDieser Schritt ist nur beim ersten Einrichten nötig.",
+        "description": "**Drücke jetzt den SYNC-Knopf am Sensor für 5 Sekunden** bis die LED blinkt.\n\nKlicke danach innerhalb von 30 Sekunden auf **Koppeln** – Home Assistant verbindet sich einmalig mit dem Sensor.\n\nDieser Schritt ist nur beim ersten Einrichten nötig.",
         "submit": "Koppeln"
+      },
+      "bottle_size": {
+        "title": "Flaschengröße wählen",
+        "description": "Wähle die Größe deiner Gasflasche. Diese wird für die genaue Füllstandsberechnung benötigt.",
+        "data": { "bottle_size": "Flaschengröße" }
       }
     },
     "error": {
       "bond_failed": "Verbindung fehlgeschlagen. Stelle sicher, dass der SYNC-Knopf gedrückt wurde und der Sensor in Reichweite ist.",
-      "bond_timeout": "Zeitüberschreitung. Drücke den SYNC-Knopf erneut und versuche es sofort."
+      "bond_timeout": "Zeitüberschreitung. Drücke den SYNC-Knopf erneut und klicke sofort auf Koppeln.",
+      "no_devices_found_yet": "Noch kein Sensor gefunden. Klicke auf 'Erneut suchen' (der Sensor sendet alle ~60 Sekunden)."
     },
     "abort": {
       "already_configured": "Dieser Sensor ist bereits eingerichtet.",
