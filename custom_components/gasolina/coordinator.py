@@ -220,18 +220,9 @@ class GasolinaCoordinator:
                 except Exception as exc:  # noqa: BLE001
                     return None, f"err:{type(exc).__name__}"
 
-            await asyncio.sleep(2.5)
+            await asyncio.sleep(2.0)
 
-            before_b, before_hex = await _size_byte()
-            _LOGGER.warning(
-                "%s: SIZE-TEST before → byte7=%s  0001=%s",
-                self.address,
-                ("0x%02X" % before_b) if before_b is not None else "?",
-                before_hex,
-            )
-
-            # Write the bottle-size code to the COMMAND characteristic (0003),
-            # acknowledged. Then verify via char 0001 byte[7] (the real register).
+            # WRITE FIRST (most critical op – do it while the link is freshest)
             await asyncio.wait_for(
                 client.write_gatt_char(
                     GATT_CHAR_CMD_UUID, bytes([write_byte]), response=True
@@ -239,22 +230,29 @@ class GasolinaCoordinator:
                 timeout=8.0,
             )
             _LOGGER.warning(
-                "%s: SIZE-TEST wrote 0x%02X (%s) to cmd 0003",
+                "%s: SIZE-TEST wrote 0x%02X (%s) to cmd 0003 (acknowledged)",
                 self.address, write_byte, bottle_size,
             )
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(1.5)
 
-            after_b, after_hex = await _size_byte()
-            _LOGGER.warning(
-                "%s: SIZE-TEST after  → byte7=%s  0001=%s",
-                self.address,
-                ("0x%02X" % after_b) if after_b is not None else "?",
-                after_hex,
-            )
+            # Verify via char 0001 byte[7] – give the read several chances
+            after_b = None
+            for vtry in range(3):
+                after_b, after_hex = await _size_byte()
+                _LOGGER.warning(
+                    "%s: SIZE-TEST verify%d → byte7=%s  0001=%s",
+                    self.address, vtry,
+                    ("0x%02X" % after_b) if after_b is not None else "?",
+                    after_hex,
+                )
+                if after_b is not None:
+                    break
+                await asyncio.sleep(1.5)
+
             ok = after_b == write_byte
             _LOGGER.warning(
                 "%s: SIZE-TEST result → %s (wanted 0x%02X, got %s)",
-                self.address, "SUCCESS" if ok else "NO-CHANGE",
+                self.address, "SUCCESS" if ok else "NO-CHANGE/UNVERIFIED",
                 write_byte,
                 ("0x%02X" % after_b) if after_b is not None else "?",
             )
