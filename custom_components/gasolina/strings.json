@@ -11,12 +11,30 @@
       "bluetooth_confirm": {
         "title": "Gasolina Sensor gefunden",
         "description": "Möchtest du den Sensor **{name}** hinzufügen?"
+      },
+      "bottle_size": {
+        "title": "Flaschengröße",
+        "description": "Wähle die Größe deiner Gasflasche. Dies wird für die genaue Füllstandsberechnung benötigt.",
+        "data": {
+          "bottle_size": "Flaschengröße"
+        }
       }
     },
     "abort": {
       "already_configured": "Dieser Sensor ist bereits eingerichtet.",
       "no_devices_found": "Kein Gasolina-Sensor in der Nähe gefunden. Stelle sicher, dass der Sensor eingeschaltet und in Reichweite ist.",
       "not_supported": "Dieses Gerät wird nicht unterstützt."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Gasolina Einstellungen",
+        "description": "Flaschengröße ändern.",
+        "data": {
+          "bottle_size": "Flaschengröße"
+        }
+      }
     }
   }
 }
