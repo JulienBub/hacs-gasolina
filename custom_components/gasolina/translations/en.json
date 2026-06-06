@@ -6,10 +6,6 @@
         "description": "Found Gasolina sensors are shown below. Select your sensor, or click **Scan again** if none appear yet.",
         "data": { "address": "Sensor" }
       },
-      "bluetooth_confirm": {
-        "title": "Gasolina Sensor Found",
-        "description": "Sensor **{name}** was found. Click Next to pair it."
-      },
       "bond": {
         "title": "Pair Sensor",
         "description": "**Press the SYNC button on the sensor for 5 seconds** until the LED flashes.\n\nThen click **Pair** within 30 seconds – Home Assistant will connect to the sensor once to establish a Bluetooth bond.\n\nThis step is only required during initial setup."
