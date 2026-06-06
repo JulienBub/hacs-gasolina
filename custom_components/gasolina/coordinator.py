@@ -47,12 +47,10 @@ class GasolinaCoordinator:
             return
         self.data = new_data
         _LOGGER.debug(
-            "%s: fill=%d%% battery=%d%% temp=%d°C bottle=%s",
+            "%s: fill=%d%% battery=%d%%",
             self.address,
             new_data.fill_level,
             new_data.battery,
-            new_data.temperature,
-            new_data.bottle_size,
         )
         for listener in list(self._listeners):
             listener()
