@@ -6,10 +6,11 @@ from dataclasses import dataclass
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 
 from .const import (
+    BOTTLE_ECHO_MAX,
+    DEFAULT_BOTTLE_SIZE,
     MANUFACTURER_ID,
     MIN_MANUFACTURER_DATA_LENGTH,
     OFFSET_BATTERY,
-    OFFSET_EMPTY_ECHO,
     OFFSET_FILL_ECHO,
 )
 
@@ -22,17 +23,18 @@ class GasolinaData:
     battery: int       # 0–100 %
 
 
-def parse_advertisement(service_info: BluetoothServiceInfoBleak) -> GasolinaData | None:
-    """Return parsed GasolinaData from a BLE advertisement, or None if not a Gasolina device."""
+def parse_advertisement(
+    service_info: BluetoothServiceInfoBleak,
+    bottle_size: str = DEFAULT_BOTTLE_SIZE,
+) -> GasolinaData | None:
+    """Return parsed GasolinaData from a BLE advertisement, or None if not valid."""
     data = service_info.manufacturer_data.get(MANUFACTURER_ID)
     if data is None or len(data) < MIN_MANUFACTURER_DATA_LENGTH:
         return None
 
-    fill_echo  = data[OFFSET_FILL_ECHO]   # echo units of liquid
-    empty_echo = data[OFFSET_EMPTY_ECHO]  # echo units of empty space
-    total = fill_echo + empty_echo
-
-    fill_level = round(fill_echo * 100.0 / total, 1) if total > 0 else 0.0
+    echo_max = BOTTLE_ECHO_MAX.get(bottle_size, BOTTLE_ECHO_MAX[DEFAULT_BOTTLE_SIZE])
+    fill_echo = data[OFFSET_FILL_ECHO]
+    fill_level = round(min(fill_echo * 100.0 / echo_max, 100.0), 1)
 
     return GasolinaData(
         fill_level=fill_level,
