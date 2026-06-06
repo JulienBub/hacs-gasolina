@@ -206,24 +206,52 @@ class GasolinaCoordinator:
             return False
 
         async def _write(client):
-            from .const import GATT_CHAR_CMD_UUID
+            from .const import GATT_CHAR_RW_UUID, GATT_CHAR_DATA_UUID
 
-            # Minimal, single-operation session: settle, ONE acknowledged write,
-            # settle so the device can commit, then disconnect. No reads – every
-            # extra ATT op on this marginal link risks GATT error 133.
+            async def _read_hex(uuid):
+                try:
+                    raw = await asyncio.wait_for(client.read_gatt_char(uuid), timeout=4.0)
+                    return raw.hex() if raw else "empty"
+                except Exception as exc:  # noqa: BLE001
+                    return f"err:{type(exc).__name__}"
+
             await asyncio.sleep(2.5)
+
+            # CHAR-0002 EXPERIMENT: read current 4-byte register, then write it
+            # back with the last byte replaced by the bottle-size code.
+            before_002 = await _read_hex(GATT_CHAR_RW_UUID)
+            before_001 = await _read_hex(GATT_CHAR_DATA_UUID)
+            _LOGGER.warning(
+                "%s: C0002-TEST before → 0002=%s 0001=%s",
+                self.address, before_002, before_001,
+            )
+
+            # Build a 4-byte payload from the current value with byte[3]=code.
+            try:
+                cur = bytes.fromhex(before_002) if before_002 and ":" not in before_002 and "err" not in before_002 else b"\x01\x02\x03\x04"
+            except ValueError:
+                cur = b"\x01\x02\x03\x04"
+            if len(cur) < 4:
+                cur = (cur + b"\x00\x00\x00\x00")[:4]
+            payload = bytes([cur[0], cur[1], cur[2], write_byte])
+
             await asyncio.wait_for(
-                client.write_gatt_char(
-                    GATT_CHAR_CMD_UUID, bytes([write_byte]), response=True
-                ),
+                client.write_gatt_char(GATT_CHAR_RW_UUID, payload, response=False),
                 timeout=8.0,
             )
             _LOGGER.warning(
-                "%s: WRITE-OK wrote 0x%02X (%s) to cmd char 0003 (acknowledged)",
-                self.address, write_byte, bottle_size,
+                "%s: C0002-TEST wrote %s (size byte 0x%02X=%s) to char 0002",
+                self.address, payload.hex(), write_byte, bottle_size,
             )
-            # Give the device time to persist before we tear down the link
-            await asyncio.sleep(2.5)
+            await asyncio.sleep(1.5)
+
+            after_002 = await _read_hex(GATT_CHAR_RW_UUID)
+            after_001 = await _read_hex(GATT_CHAR_DATA_UUID)
+            _LOGGER.warning(
+                "%s: C0002-TEST after  → 0002=%s 0001=%s",
+                self.address, after_002, after_001,
+            )
+            await asyncio.sleep(1.5)
             return True
 
         # Retry the whole connect+write up to 5 times to beat error-133 flakiness
