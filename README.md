@@ -35,7 +35,7 @@ Der Sensor kommuniziert **passiv per Bluetooth Low Energy (BLE)** – kein Pairi
 - **Home Assistant** 2023.8.0 oder neuer
 - **Bluetooth-Empfang** – eine der folgenden Optionen:
   - Eingebauter BT-Adapter im HA-Host
-  - [ESPHome Bluetooth Proxy](https://esphome.io/components/bluetooth_proxy.html) (empfohlen für größere Wohnungen)
+  - [ESPHome Bluetooth Proxy](https://esphome.io/components/bluetooth_proxy.html)
 
 ---
 
