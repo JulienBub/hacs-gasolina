@@ -220,13 +220,13 @@ class GasolinaCoordinator:
                 pre = await asyncio.wait_for(
                     client.read_gatt_char(GATT_CHAR_DATA_UUID), timeout=4.0
                 )
-                _LOGGER.info(
+                _LOGGER.warning(
                     "%s: pre-write char0001=%s  byte[7]=0x%02X",
                     self.address, pre.hex(),
                     pre[GATT_DATA_BOTTLE_SIZE_OFFSET] if len(pre) > GATT_DATA_BOTTLE_SIZE_OFFSET else -1,
                 )
             except Exception as exc:  # noqa: BLE001
-                _LOGGER.info("%s: pre-write read failed – %s", self.address, exc)
+                _LOGGER.warning("%s: pre-write read failed – %s", self.address, exc)
 
             # Primary: ATT Write Request to char 0001 (handle 0x0001)
             wrote = False
@@ -235,10 +235,10 @@ class GasolinaCoordinator:
                     client.write_gatt_char(GATT_CHAR_DATA_UUID, payload, response=True),
                     timeout=6.0,
                 )
-                _LOGGER.info("%s: write 16B → char 0001 (ATT Write Req) OK", self.address)
+                _LOGGER.warning("%s: write 16B → char 0001 (ATT Write Req) OK", self.address)
                 wrote = True
             except Exception as exc:  # noqa: BLE001
-                _LOGGER.info(
+                _LOGGER.warning(
                     "%s: write 16B → char 0001 FAILED (%s) – trying char 0002 WO-RSP",
                     self.address, exc,
                 )
@@ -250,9 +250,9 @@ class GasolinaCoordinator:
                         client.write_gatt_char(GATT_CHAR_RW_UUID, payload, response=False),
                         timeout=6.0,
                     )
-                    _LOGGER.info("%s: write 16B → char 0002 (WO-RSP) OK", self.address)
+                    _LOGGER.warning("%s: write 16B → char 0002 (WO-RSP) OK", self.address)
                 except Exception as exc:  # noqa: BLE001
-                    _LOGGER.info("%s: write 16B → char 0002 WO-RSP FAILED: %s", self.address, exc)
+                    _LOGGER.warning("%s: write 16B → char 0002 WO-RSP FAILED: %s", self.address, exc)
 
             await asyncio.sleep(2.0)
 
@@ -268,7 +268,7 @@ class GasolinaCoordinator:
                 if raw and len(raw) > GATT_DATA_BOTTLE_SIZE_OFFSET:
                     got = raw[GATT_DATA_BOTTLE_SIZE_OFFSET]
                     verified = (got == write_byte)
-                    _LOGGER.info(
+                    _LOGGER.warning(
                         "%s: post-write char0001 byte[7]=0x%02X (target=0x%02X) → %s",
                         self.address, got, write_byte, "OK" if verified else "NOT CHANGED",
                     )
@@ -279,11 +279,11 @@ class GasolinaCoordinator:
         for attempt in range(1, 4):
             try:
                 if await self._gatt_trigger.run_on_next_advertisement(_write) is True:
-                    _LOGGER.info("%s: bottle size set to %s (verified)", self.address, bottle_size)
+                    _LOGGER.warning("%s: bottle size set to %s (verified)", self.address, bottle_size)
                     self._bottle_size_user_set = False
                     return True
             except Exception as exc:  # noqa: BLE001
-                _LOGGER.info(
+                _LOGGER.warning(
                     "%s: write attempt %d – GATT connection error: %s",
                     self.address, attempt, exc,
                 )
