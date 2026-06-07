@@ -185,22 +185,23 @@ class GasolinaCoordinator:
         self._notify_listeners()
 
     async def async_write_bottle_size(self, bottle_size: str) -> bool:
-        """Attempt to set the bottle size via GATT and verify via char 0001 byte[7].
+        """Attempt to set the bottle size via GATT.
 
-        Write strategy (v0.1.1 – from HCI log analysis 2026-06-06 21:21):
-        The official Gasolina app uses Qualcomm vendor HCI cmd 0xFD57 with 18-byte
-        parameter [0x01, 0x00, size_code, 0x40, 0x00, 0x11, 0x11, 0x01, 0x80, 0x00×9].
-        Bytes [0x01, 0x00] = ATT attribute handle 0x0001 LE = char 0001 (GATT_CHAR_DATA_UUID).
-        Bytes [2..17] = the 16-byte write payload.
+        Write strategy (v0.1.3):
+        char 0001 rejects writes (ATT error 3 = Write not permitted).
+        char 0002 WO-RSP accepts bytes but does not change the config.
+        → Try char 0003 (write+notify, the command characteristic) which is
+          the logical home for configuration changes.
 
-        Primary:  ATT Write Request (response=True) to char 0001 with 16-byte payload.
-        Fallback: Write-without-response to char 0002 with same payload.
+        We try three payloads in order and return True on first success.
+        Verification is done via the next passive BLE advertisement
+        (mfr_payload[10] is the ground truth for bottle size).
         """
         from .const import (
             BOTTLE_SIZE_TO_BYTE,
+            GATT_CHAR_CMD_UUID,
             GATT_CHAR_DATA_UUID,
             GATT_CHAR_RW_UUID,
-            GATT_DATA_BOTTLE_SIZE_OFFSET,
         )
         import asyncio
 
@@ -208,78 +209,73 @@ class GasolinaCoordinator:
         if write_byte is None:
             return False
 
-        # 16-byte payload = vendor cmd param bytes [2..17]
-        payload = bytes([write_byte, 0x40, 0x00, 0x11, 0x11, 0x01, 0x80,
-                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
-
         async def _write(client):
             await asyncio.sleep(1.5)
 
-            # Pre-write read for diagnostics
+            # Pre-write: dump full char 0001 for format analysis
             try:
                 pre = await asyncio.wait_for(
                     client.read_gatt_char(GATT_CHAR_DATA_UUID), timeout=4.0
                 )
-                _LOGGER.warning(
-                    "%s: pre-write char0001=%s  byte[7]=0x%02X",
-                    self.address, pre.hex(),
-                    pre[GATT_DATA_BOTTLE_SIZE_OFFSET] if len(pre) > GATT_DATA_BOTTLE_SIZE_OFFSET else -1,
-                )
+                _LOGGER.warning("%s: pre-write char0001=%s", self.address, pre.hex())
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.warning("%s: pre-write read failed – %s", self.address, exc)
 
-            # Primary: ATT Write Request to char 0001 (handle 0x0001)
-            wrote = False
-            try:
-                await asyncio.wait_for(
-                    client.write_gatt_char(GATT_CHAR_DATA_UUID, payload, response=True),
-                    timeout=6.0,
-                )
-                _LOGGER.warning("%s: write 16B → char 0001 (ATT Write Req) OK", self.address)
-                wrote = True
-            except Exception as exc:  # noqa: BLE001
-                _LOGGER.warning(
-                    "%s: write 16B → char 0001 FAILED (%s) – trying char 0002 WO-RSP",
-                    self.address, exc,
-                )
-
-            # Fallback: write-without-response to char 0002
-            if not wrote:
+            # Try 1: [01 01 write_byte] → char 0003 (command, write+notify)
+            for payload, label in [
+                (bytes([0x01, 0x01, write_byte]), f"[01 01 {write_byte:02X}]"),
+                (bytes([write_byte]),              f"[{write_byte:02X}]"),
+                (bytes([0x03, write_byte]),        f"[03 {write_byte:02X}]"),
+            ]:
                 try:
                     await asyncio.wait_for(
-                        client.write_gatt_char(GATT_CHAR_RW_UUID, payload, response=False),
+                        client.write_gatt_char(GATT_CHAR_CMD_UUID, payload, response=True),
                         timeout=6.0,
                     )
-                    _LOGGER.warning("%s: write 16B → char 0002 (WO-RSP) OK", self.address)
-                except Exception as exc:  # noqa: BLE001
-                    _LOGGER.warning("%s: write 16B → char 0002 WO-RSP FAILED: %s", self.address, exc)
-
-            await asyncio.sleep(2.0)
-
-            # Verify via char 0001 byte[7]
-            for _ in range(3):
-                try:
-                    raw = await asyncio.wait_for(
-                        client.read_gatt_char(GATT_CHAR_DATA_UUID), timeout=4.0
-                    )
-                except Exception:  # noqa: BLE001
-                    await asyncio.sleep(1.5)
-                    continue
-                if raw and len(raw) > GATT_DATA_BOTTLE_SIZE_OFFSET:
-                    got = raw[GATT_DATA_BOTTLE_SIZE_OFFSET]
-                    verified = (got == write_byte)
                     _LOGGER.warning(
-                        "%s: post-write char0001 byte[7]=0x%02X (target=0x%02X) → %s",
-                        self.address, got, write_byte, "OK" if verified else "NOT CHANGED",
+                        "%s: write %s → char 0003 OK – waiting for adv to confirm",
+                        self.address, label,
                     )
-                    return verified
-                await asyncio.sleep(1.5)
+                    # Give the device a moment then read char0001 for post-write dump
+                    await asyncio.sleep(2.0)
+                    try:
+                        post = await asyncio.wait_for(
+                            client.read_gatt_char(GATT_CHAR_DATA_UUID), timeout=4.0
+                        )
+                        _LOGGER.warning("%s: post-write char0001=%s", self.address, post.hex())
+                    except Exception:  # noqa: BLE001
+                        pass
+                    # Return True: the passive-BLE advertisement will confirm or
+                    # naturally revert the coordinator's bottle_size via mfr_payload[10].
+                    return True
+                except Exception as exc:  # noqa: BLE001
+                    _LOGGER.warning(
+                        "%s: write %s → char 0003 FAILED: %s", self.address, label, exc
+                    )
+
+            # Last-resort: 16-byte WO-RSP to char 0002 (known to go through but
+            # probably doesn't change config — kept for future reference)
+            payload_16 = bytes([write_byte, 0x40, 0x00, 0x11, 0x11, 0x01, 0x80,
+                                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+            try:
+                await asyncio.wait_for(
+                    client.write_gatt_char(GATT_CHAR_RW_UUID, payload_16, response=False),
+                    timeout=6.0,
+                )
+                _LOGGER.warning("%s: write 16B → char 0002 WO-RSP OK (last resort)", self.address)
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.warning("%s: write 16B → char 0002 WO-RSP FAILED: %s", self.address, exc)
+
             return False
 
         for attempt in range(1, 4):
             try:
-                if await self._gatt_trigger.run_on_next_advertisement(_write) is True:
-                    _LOGGER.warning("%s: bottle size set to %s (verified)", self.address, bottle_size)
+                result = await self._gatt_trigger.run_on_next_advertisement(_write)
+                if result is True:
+                    _LOGGER.warning(
+                        "%s: GATT write for %s sent – advertisement will confirm",
+                        self.address, bottle_size,
+                    )
                     self._bottle_size_user_set = False
                     return True
             except Exception as exc:  # noqa: BLE001
@@ -290,8 +286,7 @@ class GasolinaCoordinator:
             await asyncio.sleep(3.0)
 
         _LOGGER.warning(
-            "%s: could not set bottle size to %s after 3 attempts "
-            "(char 0001 ATT Write Req + char 0002 WO-RSP both tried).",
+            "%s: could not write bottle size %s – all char 0003 payloads rejected.",
             self.address, bottle_size,
         )
         return False

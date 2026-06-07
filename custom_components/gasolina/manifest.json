@@ -1,7 +1,7 @@
 {
   "domain": "gasolina",
   "name": "Gasolina",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "documentation": "https://github.com/JulienBub/hacs-gasolina",
   "issue_tracker": "https://github.com/JulienBub/hacs-gasolina/issues",
   "dependencies": ["bluetooth"],
